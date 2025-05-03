@@ -113,10 +113,14 @@ impl From<&SerializableFileAttr> for fuser::FileAttr {
 pub struct SqliteProvider {
     conn: Connection,
     next_inode: u64,
+    pub osx_mode: bool,
 }
 
 impl SqliteProvider {
     pub fn new(db_path: &str) -> Result<Self> {
+        Self::new_with_mode(db_path, false)
+    }
+    pub fn new_with_mode(db_path: &str, osx_mode: bool) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS files (
@@ -164,7 +168,7 @@ impl SqliteProvider {
             [],
             |row| row.get::<_, Option<u64>>(0),
         )?.unwrap_or(ROOT_INODE) + 1;
-        Ok(Self { conn, next_inode })
+        Ok(Self { conn, next_inode, osx_mode })
     }
     fn alloc_inode(&mut self) -> u64 {
         let ino = self.next_inode;
@@ -312,6 +316,9 @@ impl Provider for SqliteProvider {
         }).unwrap();
         for row in rows {
             let (ino, kind, name) = row.unwrap();
+            if self.osx_mode && name.starts_with("._") {
+                continue;
+            }
             entries.push((ino, kind, name));
         }
         for (i, (ino, kind, name)) in entries.into_iter().enumerate().skip(offset as usize) {
@@ -323,6 +330,10 @@ impl Provider for SqliteProvider {
     }
     fn mkdir(&mut self, parent: u64, name: &OsStr, mode: u32, umask: u32, reply: fuser::ReplyEntry) {
         let name_str = name.to_str().unwrap_or("");
+        if self.osx_mode && name_str.starts_with("._") {
+            reply.error(libc::EACCES);
+            return;
+        }
         if self.get_child_ino(parent, name_str).is_some() {
             reply.error(libc::EEXIST); return;
         }
@@ -354,6 +365,10 @@ impl Provider for SqliteProvider {
     }
     fn create(&mut self, parent: u64, name: &OsStr, mode: u32, _flags: u32, umask: i32, reply: fuser::ReplyCreate) {
         let name_str = name.to_str().unwrap_or("");
+        if self.osx_mode && name_str.starts_with("._") {
+            reply.error(libc::EACCES);
+            return;
+        }
         if self.get_child_ino(parent, name_str).is_some() {
             reply.error(libc::EEXIST); return;
         }

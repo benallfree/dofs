@@ -14,9 +14,13 @@ fn main() {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
     let args: Vec<String> = std::env::args().collect();
     let mut provider_name = "memory";
+    let mut osx_mode = false;
     for arg in &args {
         if let Some(rest) = arg.strip_prefix("--provider=") {
             provider_name = rest;
+        }
+        if arg == "--mode=osx" {
+            osx_mode = true;
         }
     }
     let mountpoint = "./mnt";
@@ -46,12 +50,12 @@ fn main() {
     let fs: FuseFS = match provider_name {
         "sqlite" => {
             println!("Using SQLite provider");
-            let sqlite = SqliteProvider::new("cf-fuse.db").expect("Failed to open SQLite DB");
+            let sqlite = SqliteProvider::new_with_mode("cf-fuse.db", osx_mode).expect("Failed to open SQLite DB");
             FuseFS::new(Box::new(sqlite))
         },
         _ => {
             println!("Using memory provider");
-            FuseFS::new(Box::new(MemoryProvider::new()))
+            FuseFS::new(Box::new(MemoryProvider::new_with_mode(osx_mode)))
         }
     };
     info!("Mounting FS at {} with provider {}", mountpoint, provider_name);

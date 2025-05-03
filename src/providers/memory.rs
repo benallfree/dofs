@@ -31,10 +31,15 @@ pub struct MemoryProvider {
     pub inodes: HashMap<u64, Node>,
     pub paths: HashMap<PathBuf, u64>,
     pub next_inode: u64,
+    pub xattrs: HashMap<(u64, String), Vec<u8>>,
+    pub osx_mode: bool,
 }
 
 impl MemoryProvider {
     pub fn new() -> Self {
+        Self::new_with_mode(false)
+    }
+    pub fn new_with_mode(osx_mode: bool) -> Self {
         let mut inodes = HashMap::new();
         let mut paths = HashMap::new();
         let now = SystemTime::now();
@@ -62,7 +67,7 @@ impl MemoryProvider {
         });
         inodes.insert(ROOT_INODE, root);
         paths.insert(PathBuf::from("/"), ROOT_INODE);
-        Self { inodes, paths, next_inode: ROOT_INODE + 1 }
+        Self { inodes, paths, next_inode: ROOT_INODE + 1, xattrs: HashMap::new(), osx_mode }
     }
     pub fn alloc_inode(&mut self) -> u64 {
         let ino = self.next_inode;
@@ -196,6 +201,9 @@ impl Provider for MemoryProvider {
         if let Some(Node::Dir(dir)) = self.inodes.get(&ino) {
             let mut entries = vec![(ROOT_INODE, fuser::FileType::Directory, ".".to_string()), (ROOT_INODE, fuser::FileType::Directory, "..".to_string())];
             for (name, &child_ino) in &dir.children {
+                if self.osx_mode && name.starts_with("._") {
+                    continue;
+                }
                 let node = self.inodes.get(&child_ino).unwrap();
                 let kind = match node {
                     Node::File(_) => fuser::FileType::RegularFile,
@@ -215,6 +223,10 @@ impl Provider for MemoryProvider {
     }
     fn mkdir(&mut self, parent: u64, name: &OsStr, mode: u32, umask: u32, reply: fuser::ReplyEntry) {
         let name_str = name.to_str().unwrap_or("");
+        if self.osx_mode && name_str.starts_with("._") {
+            reply.error(libc::EACCES);
+            return;
+        }
         let already_exists = if let Some(Node::Dir(dir)) = self.inodes.get(&parent) {
             dir.children.contains_key(name_str)
         } else {
@@ -257,6 +269,10 @@ impl Provider for MemoryProvider {
     }
     fn create(&mut self, parent: u64, name: &OsStr, mode: u32, flags: u32, umask: i32, reply: fuser::ReplyCreate) {
         let name_str = name.to_str().unwrap_or("");
+        if self.osx_mode && name_str.starts_with("._") {
+            reply.error(libc::EACCES);
+            return;
+        }
         let already_exists = if let Some(Node::Dir(dir)) = self.inodes.get(&parent) {
             dir.children.contains_key(name_str)
         } else {
