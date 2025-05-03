@@ -110,17 +110,15 @@ impl From<&SerializableFileAttr> for fuser::FileAttr {
     }
 }
 
-pub struct SqliteProvider {
+pub struct SqliteChunkedProvider {
     conn: Connection,
     next_inode: u64,
     pub osx_mode: bool,
+    pub chunk_size: usize,
 }
 
-impl SqliteProvider {
-    pub fn new(db_path: &str) -> Result<Self> {
-        Self::new_with_mode(db_path, false)
-    }
-    pub fn new_with_mode(db_path: &str, osx_mode: bool) -> Result<Self> {
+impl SqliteChunkedProvider {
+    pub fn new(db_path: &str, chunk_size: Option<usize>) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS files (
@@ -128,8 +126,16 @@ impl SqliteProvider {
                 name TEXT NOT NULL,
                 parent INTEGER,
                 is_dir INTEGER NOT NULL,
-                data BLOB,
                 attr BLOB
+            );"
+        )?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS chunks (
+                ino INTEGER NOT NULL,
+                offset INTEGER NOT NULL,
+                data BLOB,
+                length INTEGER NOT NULL,
+                PRIMARY KEY (ino, offset)
             );"
         )?;
         // Ensure root exists
@@ -157,8 +163,8 @@ impl SqliteProvider {
                 };
                 let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
                 conn.execute(
-                    "INSERT INTO files (ino, name, parent, is_dir, data, attr) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![ROOT_INODE, "/", None::<u64>, 1, None::<Vec<u8>>, attr_bytes],
+                    "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![ROOT_INODE, "/", None::<u64>, 1, attr_bytes],
                 )?;
             }
         }
@@ -168,12 +174,90 @@ impl SqliteProvider {
             [],
             |row| row.get::<_, Option<u64>>(0),
         )?.unwrap_or(ROOT_INODE) + 1;
-        Ok(Self { conn, next_inode, osx_mode })
+        Ok(Self { conn, next_inode, osx_mode: false, chunk_size: chunk_size.unwrap_or(4096) })
     }
-    fn alloc_inode(&mut self) -> u64 {
-        let ino = self.next_inode;
-        self.next_inode += 1;
-        ino
+    pub fn new_with_mode(db_path: &str, osx_mode: bool, chunk_size: usize) -> Result<Self> {
+        let conn = Connection::open(db_path)?;
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS files (
+                ino INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                parent INTEGER,
+                is_dir INTEGER NOT NULL,
+                attr BLOB
+            );
+            CREATE TABLE IF NOT EXISTS chunks (
+                ino INTEGER NOT NULL,
+                offset INTEGER NOT NULL,
+                data BLOB NOT NULL,
+                length INTEGER NOT NULL,
+                PRIMARY KEY (ino, offset)
+            );"
+        )?;
+        // Ensure root exists
+        {
+            let mut stmt = conn.prepare("SELECT COUNT(*) FROM files WHERE ino = ?1")?;
+            let count: i64 = stmt.query_row(params![ROOT_INODE], |row| row.get(0))?;
+            if count == 0 {
+                let now = SystemTime::now();
+                let attr = fuser::FileAttr {
+                    ino: ROOT_INODE,
+                    size: 0,
+                    blocks: 0,
+                    atime: now,
+                    mtime: now,
+                    ctime: now,
+                    crtime: now,
+                    kind: fuser::FileType::Directory,
+                    perm: 0o755,
+                    nlink: 2,
+                    uid: unsafe { libc::geteuid() },
+                    gid: unsafe { libc::getegid() },
+                    rdev: 0,
+                    flags: 0,
+                    blksize: 512,
+                };
+                let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
+                conn.execute(
+                    "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![ROOT_INODE, "/", None::<u64>, 1, attr_bytes],
+                )?;
+            }
+        }
+        // Find max inode
+        let next_inode: u64 = conn.query_row(
+            "SELECT MAX(ino) FROM files",
+            [],
+            |row| row.get::<_, Option<u64>>(0),
+        )?.unwrap_or(ROOT_INODE) + 1;
+        Ok(Self { conn, next_inode, osx_mode, chunk_size })
+    }
+    fn get_file_data(&self, ino: u64) -> Option<Vec<u8>> {
+        // Minimal stub: just return all chunks concatenated (not efficient, but placeholder)
+        let mut stmt = self.conn.prepare("SELECT offset, data, length FROM chunks WHERE ino = ?1 ORDER BY offset ASC").ok()?;
+        let mut rows = stmt.query(params![ino]).ok()?;
+        let mut data = Vec::new();
+        while let Some(row) = rows.next().ok()? {
+            let offset: i64 = row.get(0).ok()?;
+            let chunk_data: Vec<u8> = row.get(1).ok()?;
+            let length: i64 = row.get(2).ok()?;
+            if data.len() < (offset as usize) {
+                data.resize(offset as usize, 0);
+            }
+            if data.len() < (offset as usize + length as usize) {
+                data.resize(offset as usize + length as usize, 0);
+            }
+            data[offset as usize..offset as usize + length as usize].copy_from_slice(&chunk_data[..length as usize]);
+        }
+        Some(data)
+    }
+    fn set_file_data(&self, ino: u64, data: &[u8]) {
+        // Minimal stub: delete all chunks and insert a single chunk
+        let _ = self.conn.execute("DELETE FROM chunks WHERE ino = ?1", params![ino]);
+        let _ = self.conn.execute(
+            "INSERT INTO chunks (ino, offset, data, length) VALUES (?1, ?2, ?3, ?4)",
+            params![ino, 0i64, data, data.len() as i64],
+        );
     }
     fn get_attr(&self, ino: u64) -> Option<fuser::FileAttr> {
         self.conn.query_row(
@@ -181,7 +265,7 @@ impl SqliteProvider {
             params![ino],
             |row| {
                 let attr_blob: Vec<u8> = row.get(0)?;
-                let ser_attr: crate::providers::sqlite_simple::SerializableFileAttr = bincode::deserialize(&attr_blob).unwrap();
+                let ser_attr: SerializableFileAttr = bincode::deserialize(&attr_blob).unwrap();
                 Ok(fuser::FileAttr::from(&ser_attr))
             },
         ).optional().unwrap_or(None)
@@ -193,18 +277,121 @@ impl SqliteProvider {
             params![attr_bytes, ino],
         );
     }
-    fn get_file_data(&self, ino: u64) -> Option<Vec<u8>> {
-        self.conn.query_row(
-            "SELECT data FROM files WHERE ino = ?1",
-            params![ino],
-            |row| row.get(0),
-        ).optional().unwrap_or(None)
+    fn get_file_size(&self, ino: u64) -> u64 {
+        self.get_attr(ino).map(|attr| attr.size).unwrap_or(0)
     }
-    fn set_file_data(&self, ino: u64, data: &[u8]) {
-        let _ = self.conn.execute(
-            "UPDATE files SET data = ?1 WHERE ino = ?2",
-            params![data, ino],
+    fn set_file_size(&self, ino: u64, size: u64) {
+        if let Some(mut attr) = self.get_attr(ino) {
+            attr.size = size;
+            self.set_attr(ino, &attr);
+        }
+    }
+    fn get_file_data_range(&self, ino: u64, offset: usize, size: usize) -> Vec<u8> {
+        let mut result = vec![0u8; size];
+        let chunk_size = self.chunk_size;
+        let start_chunk = offset / chunk_size;
+        let end_chunk = (offset + size + chunk_size - 1) / chunk_size;
+        let mut stmt = self.conn.prepare(
+            "SELECT offset, data, length FROM chunks WHERE ino = ?1 AND offset >= ?2 AND offset < ?3 ORDER BY offset ASC"
+        ).unwrap();
+        let chunk_start = (start_chunk * chunk_size) as i64;
+        let chunk_end = (end_chunk * chunk_size) as i64;
+        let mut rows = stmt.query(params![ino, chunk_start, chunk_end]).unwrap();
+        while let Some(row) = rows.next().unwrap() {
+            let chunk_offset: i64 = row.get(0).unwrap();
+            let chunk_data: Vec<u8> = row.get(1).unwrap();
+            let chunk_len: i64 = row.get(2).unwrap();
+            let chunk_offset_usize = chunk_offset as usize;
+            let chunk_start_in_file = chunk_offset_usize;
+            let chunk_end_in_file = chunk_offset_usize + chunk_len as usize;
+            let read_start = offset.max(chunk_start_in_file);
+            let read_end = (offset + size).min(chunk_end_in_file);
+            if read_start < read_end {
+                let dest_start = read_start - offset;
+                let src_start = read_start - chunk_start_in_file;
+                let len = read_end - read_start;
+                result[dest_start..dest_start + len].copy_from_slice(&chunk_data[src_start..src_start + len]);
+            }
+        }
+        result
+    }
+    fn write_file_data(&self, ino: u64, offset: usize, data: &[u8]) {
+        let chunk_size = self.chunk_size;
+        let mut tx = self.conn.unchecked_transaction().unwrap();
+        let mut written = 0;
+        while written < data.len() {
+            let abs_offset = offset + written;
+            let chunk_idx = abs_offset / chunk_size;
+            let chunk_offset = chunk_idx * chunk_size;
+            let chunk_off_in_chunk = abs_offset % chunk_size;
+            let write_len = (chunk_size - chunk_off_in_chunk).min(data.len() - written);
+            // Read existing chunk if present
+            let mut chunk_data: Vec<u8> = tx.query_row(
+                "SELECT data FROM chunks WHERE ino = ?1 AND offset = ?2",
+                params![ino, chunk_offset as i64],
+                |row| row.get(0),
+            ).optional().unwrap_or(None).unwrap_or(vec![0u8; chunk_size]);
+            if chunk_data.len() < chunk_size {
+                chunk_data.resize(chunk_size, 0);
+            }
+            chunk_data[chunk_off_in_chunk..chunk_off_in_chunk + write_len]
+                .copy_from_slice(&data[written..written + write_len]);
+            // Calculate new chunk length
+            let mut chunk_length = chunk_size;
+            // If this is the last chunk, length may be less
+            let file_end = abs_offset + write_len;
+            let new_file_size = self.get_file_size(ino).max(file_end as u64);
+            if (chunk_offset + chunk_size) as u64 > new_file_size {
+                chunk_length = (new_file_size as usize - chunk_offset).min(chunk_size);
+            }
+            // Upsert chunk
+            let _ = tx.execute(
+                "INSERT INTO chunks (ino, offset, data, length) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(ino, offset) DO UPDATE SET data=excluded.data, length=excluded.length",
+                params![ino, chunk_offset as i64, &chunk_data[..chunk_length], chunk_length as i64],
+            );
+            written += write_len;
+        }
+        tx.commit().unwrap();
+        let new_size = (offset + data.len()).max(self.get_file_size(ino) as usize) as u64;
+        self.set_file_size(ino, new_size);
+    }
+    fn truncate_file(&self, ino: u64, size: u64) {
+        let chunk_size = self.chunk_size as u64;
+        let mut tx = self.conn.unchecked_transaction().unwrap();
+        // Delete all chunks past the new size
+        let first_excess_chunk = (size / chunk_size) * chunk_size;
+        let _ = tx.execute(
+            "DELETE FROM chunks WHERE ino = ?1 AND offset >= ?2",
+            params![ino, first_excess_chunk as i64],
         );
+        // If the last chunk is partial, trim it
+        if size % chunk_size != 0 {
+            let last_chunk_offset = (size / chunk_size) * chunk_size;
+            let last_len = (size % chunk_size) as i64;
+            let mut chunk_data: Option<Vec<u8>> = tx.query_row(
+                "SELECT data FROM chunks WHERE ino = ?1 AND offset = ?2",
+                params![ino, last_chunk_offset as i64],
+                |row| row.get(0),
+            ).optional().unwrap_or(None);
+            if let Some(mut chunk_data) = chunk_data {
+                chunk_data.resize(last_len as usize, 0);
+                let _ = tx.execute(
+                    "UPDATE chunks SET data = ?1, length = ?2 WHERE ino = ?3 AND offset = ?4",
+                    params![&chunk_data, last_len, ino, last_chunk_offset as i64],
+                );
+            }
+        }
+        tx.commit().unwrap();
+        self.set_file_size(ino, size);
+    }
+    fn delete_file_chunks(&self, ino: u64) {
+        let _ = self.conn.execute("DELETE FROM chunks WHERE ino = ?1", params![ino]);
+    }
+    fn alloc_inode(&mut self) -> u64 {
+        let ino = self.next_inode;
+        self.next_inode += 1;
+        ino
     }
     fn get_child_ino(&self, parent: u64, name: &str) -> Option<u64> {
         self.conn.query_row(
@@ -223,7 +410,7 @@ impl SqliteProvider {
     }
 }
 
-impl Provider for SqliteProvider {
+impl crate::providers::Provider for SqliteChunkedProvider {
     fn rmdir(&mut self, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
         let name_str = name.to_str().unwrap_or("");
         let target_ino = self.get_child_ino(parent, name_str);
@@ -236,6 +423,7 @@ impl Provider for SqliteProvider {
         }
         let _ = self.conn.execute("DELETE FROM files WHERE ino = ?1", params![ino]);
         let _ = self.conn.execute("DELETE FROM files WHERE parent = ?1 AND name = ?2", params![parent, name_str]);
+        self.delete_file_chunks(ino);
         reply.ok();
     }
     fn open(&mut self, ino: u64, reply: fuser::ReplyOpen) {
@@ -276,9 +464,7 @@ impl Provider for SqliteProvider {
             if let Some(cr) = crtime { attr.crtime = cr; }
             if let Some(fg) = flags { attr.flags = fg; }
             if let Some(new_size) = size {
-                let mut data = self.get_file_data(ino).unwrap_or_default();
-                data.resize(new_size as usize, 0);
-                self.set_file_data(ino, &data);
+                self.truncate_file(ino, new_size);
                 attr.size = new_size;
             }
             self.set_attr(ino, &attr);
@@ -359,8 +545,8 @@ impl Provider for SqliteProvider {
         };
         let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
         let _ = self.conn.execute(
-            "INSERT INTO files (ino, name, parent, is_dir, data, attr) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![ino, name_str, parent, 1, None::<Vec<u8>>, attr_bytes],
+            "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![ino, name_str, parent, 1, attr_bytes],
         );
         reply.entry(&std::time::Duration::from_secs(1), &attr, 0);
     }
@@ -394,36 +580,24 @@ impl Provider for SqliteProvider {
         };
         let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
         let _ = self.conn.execute(
-            "INSERT INTO files (ino, name, parent, is_dir, data, attr) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![ino, name_str, parent, 0, Vec::<u8>::new(), attr_bytes],
+            "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![ino, name_str, parent, 0, attr_bytes],
         );
         reply.created(&std::time::Duration::from_secs(1), &attr, 0, 0, 0);
     }
     fn read(&mut self, ino: u64, offset: i64, size: u32, reply: fuser::ReplyData) {
-        if let Some(data) = self.get_file_data(ino) {
-            let end = std::cmp::min((offset as usize) + (size as usize), data.len());
-            let start = std::cmp::min(offset as usize, data.len());
-            reply.data(&data[start..end]);
-        } else {
-            reply.error(libc::ENOENT);
+        let file_size = self.get_file_size(ino);
+        if offset as u64 >= file_size {
+            reply.data(&[]);
+            return;
         }
+        let read_size = std::cmp::min(size as u64, file_size.saturating_sub(offset as u64)) as usize;
+        let data = self.get_file_data_range(ino, offset as usize, read_size);
+        reply.data(&data);
     }
     fn write(&mut self, ino: u64, offset: i64, data: &[u8], reply: fuser::ReplyWrite) {
-        if let Some(mut file_data) = self.get_file_data(ino) {
-            let offset = offset as usize;
-            if file_data.len() < offset + data.len() {
-                file_data.resize(offset + data.len(), 0);
-            }
-            file_data[offset..offset + data.len()].copy_from_slice(data);
-            self.set_file_data(ino, &file_data);
-            if let Some(mut attr) = self.get_attr(ino) {
-                attr.size = file_data.len() as u64;
-                self.set_attr(ino, &attr);
-            }
-            reply.written(data.len() as u32);
-        } else {
-            reply.error(libc::ENOENT);
-        }
+        self.write_file_data(ino, offset as usize, data);
+        reply.written(data.len() as u32);
     }
     fn unlink(&mut self, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
         let name_str = name.to_str().unwrap_or("");
@@ -433,6 +607,7 @@ impl Provider for SqliteProvider {
             None => { reply.error(libc::ENOENT); return; }
         };
         let _ = self.conn.execute("DELETE FROM files WHERE ino = ?1", params![ino]);
+        self.delete_file_chunks(ino);
         reply.ok();
     }
 } 

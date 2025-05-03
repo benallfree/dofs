@@ -9,18 +9,23 @@ mod providers;
 use fusefs::FuseFS;
 use providers::memory::MemoryProvider;
 use providers::sqlite_simple::SqliteProvider as SqliteSimpleProvider;
+use providers::sqlite_chunked::SqliteChunkedProvider;
 
 fn main() {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
     let args: Vec<String> = std::env::args().collect();
     let mut provider_name = "memory";
     let mut osx_mode = false;
+    let mut chunk_size = 4096;
     for arg in &args {
         if let Some(rest) = arg.strip_prefix("--provider=") {
             provider_name = rest;
         }
         if arg == "--mode=osx" {
             osx_mode = true;
+        }
+        if let Some(rest) = arg.strip_prefix("--chunk_size=") {
+            chunk_size = rest.parse().unwrap_or(4096);
         }
     }
     let mountpoint = "./mnt";
@@ -50,7 +55,12 @@ fn main() {
     let fs: FuseFS = match provider_name {
         "sqlite_simple" => {
             println!("Using SQLite Simple provider");
-            let sqlite = SqliteSimpleProvider::new_with_mode("cf-fuse.db", osx_mode).expect("Failed to open SQLite DB");
+            let sqlite = SqliteSimpleProvider::new_with_mode("cf-fuse-simple.db", osx_mode).expect("Failed to open SQLite DB");
+            FuseFS::new(Box::new(sqlite))
+        },
+        "sqlite_chunked" => {
+            println!("Using SQLite Chunked provider");
+            let sqlite = SqliteChunkedProvider::new_with_mode("cf-fuse-chunked.db", osx_mode, chunk_size).expect("Failed to open SQLite DB");
             FuseFS::new(Box::new(sqlite))
         },
         _ => {
