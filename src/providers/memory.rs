@@ -37,14 +37,15 @@ impl MemoryProvider {
     pub fn new() -> Self {
         let mut inodes = HashMap::new();
         let mut paths = HashMap::new();
+        let now = SystemTime::now();
         let root_attr = fuser::FileAttr {
             ino: ROOT_INODE,
             size: 0,
             blocks: 0,
-            atime: UNIX_EPOCH,
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
+            atime: now,
+            mtime: now,
+            ctime: now,
+            crtime: now,
             kind: fuser::FileType::Directory,
             perm: 0o755,
             nlink: 2,
@@ -225,14 +226,15 @@ impl Provider for MemoryProvider {
             return;
         }
         let ino = self.alloc_inode();
+        let now = SystemTime::now();
         let attr = fuser::FileAttr {
             ino,
             size: 0,
             blocks: 0,
-            atime: UNIX_EPOCH,
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
+            atime: now,
+            mtime: now,
+            ctime: now,
+            crtime: now,
             kind: fuser::FileType::Directory,
             perm: (mode & !umask & 0o7777) as u16,
             nlink: 2,
@@ -266,14 +268,15 @@ impl Provider for MemoryProvider {
             return;
         }
         let ino = self.alloc_inode();
+        let now = SystemTime::now();
         let attr = fuser::FileAttr {
             ino,
             size: 0,
             blocks: 0,
-            atime: UNIX_EPOCH,
-            mtime: UNIX_EPOCH,
-            ctime: UNIX_EPOCH,
-            crtime: UNIX_EPOCH,
+            atime: now,
+            mtime: now,
+            ctime: now,
+            crtime: now,
             kind: fuser::FileType::RegularFile,
             perm: (mode & !(umask as u32) & 0o7777) as u16,
             nlink: 1,
