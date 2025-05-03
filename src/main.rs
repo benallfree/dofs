@@ -5,7 +5,9 @@ use std::fs;
 use log::info;
 use simplelog::*;
 mod fusefs;
+mod providers;
 use fusefs::FuseFS;
+use providers::memory::MemoryProvider;
 
 fn main() {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
@@ -33,7 +35,7 @@ fn main() {
         std::process::exit(0);
     }).expect("Error setting Ctrl+C handler");
 
-    let fs = FuseFS::new();
+    let fs = FuseFS::new(Box::new(MemoryProvider::new()));
     info!("Mounting MemFS at {}", mountpoint);
     fuser::mount2(fs, mountpoint, &[MountOption::FSName("memfs".to_string()), MountOption::AutoUnmount]).unwrap();
 }
