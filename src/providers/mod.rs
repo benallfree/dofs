@@ -1,4 +1,5 @@
 pub mod memory;
+pub mod sqlite;
 
 use fuser::{Request, ReplyAttr, ReplyEntry, ReplyDirectory, ReplyData, ReplyCreate, ReplyWrite};
 use std::ffi::OsStr;
