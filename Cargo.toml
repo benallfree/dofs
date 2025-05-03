@@ -1,0 +1,11 @@
+[package]
+name = "cf-fuse"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fuser = "0.14"
+libc = "0.2"
+log = "0.4"
+simplelog = "0.12"
+ctrlc = "3.4"
