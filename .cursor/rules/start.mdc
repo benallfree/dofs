@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+* run `cargo build` after each change to be sure it compiles
+* fix errors without prompting
