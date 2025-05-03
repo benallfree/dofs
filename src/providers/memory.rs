@@ -317,4 +317,29 @@ impl Provider for MemoryProvider {
             reply.error(libc::ENOENT);
         }
     }
+    fn unlink(&mut self, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
+        let name_str = name.to_str().unwrap_or("");
+        let target_ino = if let Some(Node::Dir(parent_dir)) = self.inodes.get(&parent) {
+            parent_dir.children.get(name_str).copied()
+        } else {
+            reply.error(libc::ENOENT);
+            return;
+        };
+        let ino = match target_ino {
+            Some(ino) => ino,
+            None => {
+                reply.error(libc::ENOENT);
+                return;
+            }
+        };
+        if let Some(Node::File(_)) = self.inodes.get(&ino) {
+            if let Some(Node::Dir(parent_dir)) = self.inodes.get_mut(&parent) {
+                parent_dir.children.remove(name_str);
+            }
+            self.inodes.remove(&ino);
+            reply.ok();
+        } else {
+            reply.error(libc::EISDIR);
+        }
+    }
 } 

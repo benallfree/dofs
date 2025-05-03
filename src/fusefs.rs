@@ -49,4 +49,7 @@ impl Filesystem for FuseFS {
     fn write(&mut self, _req: &Request<'_>, ino: u64, _fh: u64, offset: i64, data: &[u8], _write_flags: u32, _flags: i32, _lock_owner: Option<u64>, reply: ReplyWrite) {
         self.provider.write(ino, offset, data, reply)
     }
+    fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
+        self.provider.unlink(parent, name, reply)
+    }
 } 
