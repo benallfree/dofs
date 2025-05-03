@@ -1,2 +1,4 @@
 target
 mnt
+*.db
+.DS_Store
