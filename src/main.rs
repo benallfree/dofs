@@ -28,7 +28,7 @@ struct InMemoryDir {
 }
 
 #[derive(Debug)]
-struct MemFS {
+struct FuseFS {
     inodes: HashMap<u64, Node>,
     paths: HashMap<PathBuf, u64>,
     next_inode: u64,
@@ -40,7 +40,7 @@ enum Node {
     Dir(InMemoryDir),
 }
 
-impl MemFS {
+impl FuseFS {
     fn new() -> Self {
         let mut inodes = HashMap::new();
         let mut paths = HashMap::new();
@@ -78,87 +78,8 @@ impl MemFS {
     }
 }
 
-impl Filesystem for MemFS {
-    // Return ENOSYS for all unimplemented methods
-    fn rename(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, _newparent: u64, _newname: &OsStr, _flags: u32, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn link(&mut self, _req: &Request<'_>, _ino: u64, _newparent: u64, _newname: &OsStr, reply: fuser::ReplyEntry) {
-        reply.error(libc::ENOSYS);
-    }
-    fn unlink(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn mknod(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, _mode: u32, _rdev: u32, _flags: u32, reply: fuser::ReplyEntry) {
-        reply.error(libc::ENOSYS);
-    }
-    fn symlink(&mut self, _req: &Request<'_>, _parent: u64, _name: &OsStr, _link: &std::path::Path, reply: fuser::ReplyEntry) {
-        reply.error(libc::ENOSYS);
-    }
-    fn readlink(&mut self, _req: &Request<'_>, _ino: u64, reply: fuser::ReplyData) {
-        reply.error(libc::ENOSYS);
-    }
-    fn fsync(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _datasync: bool, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn fallocate(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _offset: i64, _length: i64, _mode: i32, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn statfs(&mut self, _req: &Request<'_>, _ino: u64, reply: fuser::ReplyStatfs) {
-        reply.error(libc::ENOSYS);
-    }
-    fn opendir(&mut self, _req: &Request<'_>, _ino: u64, _flags: i32, reply: fuser::ReplyOpen) {
-        reply.error(libc::ENOSYS);
-    }
-    fn releasedir(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _flags: i32, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn fsyncdir(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _datasync: bool, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn getxattr(&mut self, _req: &Request<'_>, _ino: u64, _name: &OsStr, _size: u32, reply: fuser::ReplyXattr) {
-        reply.error(libc::ENOSYS);
-    }
-    fn setxattr(&mut self, _req: &Request<'_>, _ino: u64, _name: &OsStr, _value: &[u8], _flags: i32, _position: u32, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn listxattr(&mut self, _req: &Request<'_>, _ino: u64, _size: u32, reply: fuser::ReplyXattr) {
-        reply.error(libc::ENOSYS);
-    }
-    fn removexattr(&mut self, _req: &Request<'_>, _ino: u64, _name: &OsStr, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn access(&mut self, _req: &Request<'_>, _ino: u64, _mask: i32, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
-    fn bmap(&mut self, _req: &Request<'_>, _ino: u64, _blocksize: u32, _idx: u64, reply: fuser::ReplyBmap) {
-        reply.error(libc::ENOSYS);
-    }
-    fn ioctl(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _flags: u32, _cmd: u32, _in_data: &[u8], _out_size: u32, reply: fuser::ReplyIoctl) {
-        reply.error(libc::ENOSYS);
-    }
+impl Filesystem for FuseFS {
 
-    fn copy_file_range(&mut self, _req: &Request<'_>, _ino_in: u64, _fh_in: u64, _offset_in: i64, _ino_out: u64, _fh_out: u64, _offset_out: i64, _len: u64, _flags: u32, reply: fuser::ReplyWrite) {
-        reply.error(libc::ENOSYS);
-    }
-    fn lseek(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _offset: i64, _whence: i32, reply: fuser::ReplyLseek) {
-        reply.error(libc::ENOSYS);
-    }
-    fn destroy(&mut self) {
-        // No-op
-    }
-    fn init(&mut self, _req: &Request<'_>, _config: &mut fuser::KernelConfig) -> Result<(), i32> {
-        Ok(())
-    }
-    fn forget(&mut self, _req: &Request<'_>, _ino: u64, _nlookup: u64) {
-        // No-op
-    }
-    fn getlk(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _lock_owner: u64, _start: u64, _end: u64, _typ: i32, _pid: u32, reply: fuser::ReplyLock) {
-        reply.error(libc::ENOSYS);
-    }
-    fn setlk(&mut self, _req: &Request<'_>, _ino: u64, _fh: u64, _lock_owner: u64, _start: u64, _end: u64, _typ: i32, _pid: u32, _sleep: bool, reply: fuser::ReplyEmpty) {
-        reply.error(libc::ENOSYS);
-    }
     fn rmdir(&mut self, _req: &Request<'_>, parent: u64, name: &std::ffi::OsStr, reply: fuser::ReplyEmpty) {
         let name_str = name.to_str().unwrap_or("");
         // Find parent directory
@@ -446,7 +367,7 @@ fn main() {
         std::process::exit(0);
     }).expect("Error setting Ctrl+C handler");
 
-    let fs = MemFS::new();
+    let fs = FuseFS::new();
     info!("Mounting MemFS at {}", mountpoint);
     fuser::mount2(fs, mountpoint, &[MountOption::FSName("memfs".to_string()), MountOption::AutoUnmount]).unwrap();
 }
