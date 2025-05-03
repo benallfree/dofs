@@ -8,7 +8,7 @@ mod fusefs;
 mod providers;
 use fusefs::FuseFS;
 use providers::memory::MemoryProvider;
-use providers::sqlite::SqliteProvider;
+use providers::sqlite_simple::SqliteProvider as SqliteSimpleProvider;
 
 fn main() {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
@@ -48,9 +48,9 @@ fn main() {
     }).expect("Error setting Ctrl+C handler");
 
     let fs: FuseFS = match provider_name {
-        "sqlite" => {
-            println!("Using SQLite provider");
-            let sqlite = SqliteProvider::new_with_mode("cf-fuse.db", osx_mode).expect("Failed to open SQLite DB");
+        "sqlite_simple" => {
+            println!("Using SQLite Simple provider");
+            let sqlite = SqliteSimpleProvider::new_with_mode("cf-fuse.db", osx_mode).expect("Failed to open SQLite DB");
             FuseFS::new(Box::new(sqlite))
         },
         _ => {
