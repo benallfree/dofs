@@ -9,10 +9,15 @@ const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
 
 struct ProviderTestResult {
-    name: &'static str,
+    provider: &'static str,
     elapsed: Duration,
     success: bool,
     error: Option<String>,
+}
+
+struct StressTest {
+    name: &'static str,
+    func: fn() -> Result<(), String>,
 }
 
 fn run_fuse_with_provider(provider: &str) -> std::process::Child {
@@ -38,7 +43,14 @@ fn unmount() {
     let _ = Command::new("umount").arg(MOUNTPOINT).output();
 }
 
-fn stress_test() -> Result<(), String> {
+fn clean_setup() {
+    let _ = fs::remove_file("cf-fuse-simple.db");
+    let _ = fs::remove_file("cf-fuse-chunked.db");
+    let _ = fs::remove_dir_all(MOUNTPOINT);
+    let _ = fs::create_dir_all(MOUNTPOINT);
+}
+
+fn file_create_write_read_delete() -> Result<(), String> {
     // Create file
     let mut file = File::create(TEST_FILE).map_err(|e| format!("create: {e}"))?;
     // Write data
@@ -64,41 +76,49 @@ fn integration_stress() {
         ("sqlite_simple", "SqliteSimpleProvider"),
         ("sqlite_chunked", "SqliteChunkedProvider"),
     ];
-    let mut results = Vec::new();
-    for (prov, name) in providers.iter() {
-        // Clean up before test
-        let _ = fs::remove_file("cf-fuse-simple.db");
-        let _ = fs::remove_file("cf-fuse-chunked.db");
-        let _ = fs::remove_dir_all(MOUNTPOINT);
-        let _ = fs::create_dir_all(MOUNTPOINT);
-        let mut child = run_fuse_with_provider(prov);
-        wait_for_mount();
-        let start = Instant::now();
-        let (success, error) = match stress_test() {
-            Ok(_) => (true, None),
-            Err(e) => (false, Some(e)),
-        };
-        let elapsed = start.elapsed();
-        unmount();
-        let _ = child.kill();
-        results.push(ProviderTestResult {
-            name,
-            elapsed,
-            success,
-            error,
-        });
+    let stress_tests = [
+        StressTest { name: "file_create_write_read_delete", func: file_create_write_read_delete },
+        // Add more tests here
+    ];
+    let mut results = vec![];
+    for test in &stress_tests {
+        let mut row = vec![];
+        for (prov, prov_name) in providers.iter() {
+            clean_setup();
+            let mut child = run_fuse_with_provider(prov);
+            wait_for_mount();
+            let start = Instant::now();
+            let (success, error) = match (test.func)() {
+                Ok(_) => (true, None),
+                Err(e) => (false, Some(e)),
+            };
+            let elapsed = start.elapsed();
+            unmount();
+            let _ = child.kill();
+            row.push(ProviderTestResult {
+                provider: prov_name,
+                elapsed,
+                success,
+                error,
+            });
+        }
+        results.push((test.name, row));
     }
     // Print summary table
     let mut table = Table::new();
-    table.add_row(row!["Provider", "Success", "Time (ms)", "Error"]);
-    for r in &results {
+    let mut header = vec!["operation".to_string()];
+    for (_, prov_name) in providers.iter() {
+        header.push(prov_name.to_string());
+    }
+    table.add_row(row![header[0], header[1], header[2], header[3]]);
+    for (test_name, row) in &results {
         table.add_row(row![
-            r.name,
-            if r.success { "yes" } else { "no" },
-            r.elapsed.as_millis().to_string(),
-            r.error.as_deref().unwrap_or("")
+            *test_name,
+            row.get(0).map(|r| r.elapsed.as_micros().to_string()).unwrap_or("-".to_string()),
+            row.get(1).map(|r| r.elapsed.as_micros().to_string()).unwrap_or("-".to_string()),
+            row.get(2).map(|r| r.elapsed.as_micros().to_string()).unwrap_or("-".to_string()),
         ]);
     }
     table.printstd();
-    assert!(results.iter().all(|r| r.success), "Some providers failed");
+    assert!(results.iter().all(|(_, row)| row.iter().all(|r| r.success)), "Some providers failed");
 } 
