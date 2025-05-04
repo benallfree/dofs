@@ -137,6 +137,26 @@ impl SqliteChunkedProvider {
             CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
             CREATE INDEX IF NOT EXISTS idx_chunks_ino ON chunks(ino);
             CREATE INDEX IF NOT EXISTS idx_chunks_ino_offset ON chunks(ino, offset);";
+    fn root_dir_attr() -> fuser::FileAttr {
+        let now = SystemTime::now();
+        fuser::FileAttr {
+            ino: ROOT_INODE,
+            size: 0,
+            blocks: 0,
+            atime: now,
+            mtime: now,
+            ctime: now,
+            crtime: now,
+            kind: fuser::FileType::Directory,
+            perm: 0o755,
+            nlink: 2,
+            uid: unsafe { libc::geteuid() },
+            gid: unsafe { libc::getegid() },
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        }
+    }
     #[allow(dead_code)]
     pub fn new(db_path: &str, chunk_size: Option<usize>) -> Result<Self> {
         let conn = Connection::open(db_path)?;
@@ -146,24 +166,7 @@ impl SqliteChunkedProvider {
             let mut stmt = conn.prepare("SELECT COUNT(*) FROM files WHERE ino = ?1")?;
             let count: i64 = stmt.query_row(params![ROOT_INODE], |row| row.get(0))?;
             if count == 0 {
-                let now = SystemTime::now();
-                let attr = fuser::FileAttr {
-                    ino: ROOT_INODE,
-                    size: 0,
-                    blocks: 0,
-                    atime: now,
-                    mtime: now,
-                    ctime: now,
-                    crtime: now,
-                    kind: fuser::FileType::Directory,
-                    perm: 0o755,
-                    nlink: 2,
-                    uid: unsafe { libc::geteuid() },
-                    gid: unsafe { libc::getegid() },
-                    rdev: 0,
-                    flags: 0,
-                    blksize: 512,
-                };
+                let attr = Self::root_dir_attr();
                 let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
                 conn.execute(
                     "INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
@@ -192,24 +195,7 @@ impl SqliteChunkedProvider {
             let mut stmt = conn.prepare("SELECT COUNT(*) FROM files WHERE ino = ?1")?;
             let count: i64 = stmt.query_row(params![ROOT_INODE], |row| row.get(0))?;
             if count == 0 {
-                let now = SystemTime::now();
-                let attr = fuser::FileAttr {
-                    ino: ROOT_INODE,
-                    size: 0,
-                    blocks: 0,
-                    atime: now,
-                    mtime: now,
-                    ctime: now,
-                    crtime: now,
-                    kind: fuser::FileType::Directory,
-                    perm: 0o755,
-                    nlink: 2,
-                    uid: unsafe { libc::geteuid() },
-                    gid: unsafe { libc::getegid() },
-                    rdev: 0,
-                    flags: 0,
-                    blksize: 512,
-                };
+                let attr = Self::root_dir_attr();
                 let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
                 conn.execute(
                     "INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
