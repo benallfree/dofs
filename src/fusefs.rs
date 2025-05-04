@@ -96,4 +96,7 @@ impl Filesystem for FuseFS {
     fn unlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, reply: fuser::ReplyEmpty) {
         self.provider.unlink(parent, name, reply)
     }
+    fn rename(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, newparent: u64, newname: &OsStr, flags: u32, reply: fuser::ReplyEmpty) {
+        self.provider.rename(parent, name, newparent, newname, flags, reply)
+    }
 } 

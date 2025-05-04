@@ -19,4 +19,5 @@ pub trait Provider {
     fn read(&mut self, ino: u64, offset: i64, size: u32, reply: ReplyData);
     fn write(&mut self, ino: u64, offset: i64, data: &[u8], reply: ReplyWrite);
     fn unlink(&mut self, parent: u64, name: &std::ffi::OsStr, reply: fuser::ReplyEmpty);
+    fn rename(&mut self, parent: u64, name: &OsStr, newparent: u64, newname: &OsStr, flags: u32, reply: fuser::ReplyEmpty);
 } 
