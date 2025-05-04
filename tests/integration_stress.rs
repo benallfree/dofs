@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use std::fs::{self, File, create_dir, read_dir, remove_dir, OpenOptions};
 use std::io::{Read, Write};
 use std::thread::sleep;
-use prettytable::{Table, row, cell};
+use prettytable::{Table, row, cell, Row, Cell};
 
 const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
@@ -106,6 +106,29 @@ fn file_append_read_delete() -> Result<(), String> {
     Ok(())
 }
 
+fn file_truncate_shrink_read_delete() -> Result<(), String> {
+    use std::fs::OpenOptions;
+    // Create file and write data
+    let mut file = File::create(TEST_FILE).map_err(|e| format!("create: {e}"))?;
+    let data = vec![7u8; 1024 * 1024];
+    file.write_all(&data).map_err(|e| format!("write: {e}"))?;
+    drop(file);
+    // Truncate to half
+    let mut file = OpenOptions::new().write(true).open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
+    file.set_len(512 * 1024).map_err(|e| format!("truncate: {e}"))?;
+    drop(file);
+    // Read back and check
+    let mut file = File::open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).map_err(|e| format!("read: {e}"))?;
+    if buf.len() != 512 * 1024 || !buf.iter().all(|&b| b == 7) {
+        return Err("data mismatch after truncate".to_string());
+    }
+    // Remove file
+    fs::remove_file(TEST_FILE).map_err(|e| format!("remove: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -117,6 +140,7 @@ fn integration_stress() {
         StressTest { name: "file_create_write_read_delete", func: file_create_write_read_delete },
         StressTest { name: "dir_create_list_delete", func: dir_create_list_delete },
         StressTest { name: "file_append_read_delete", func: file_append_read_delete },
+        StressTest { name: "file_truncate_shrink_read_delete", func: file_truncate_shrink_read_delete },
         // Add more tests here
     ];
     let mut results = vec![];
@@ -149,14 +173,13 @@ fn integration_stress() {
     for (_, prov_name) in providers.iter() {
         header.push(prov_name.to_string());
     }
-    table.add_row(row![header[0], header[1], header[2], header[3]]);
+    table.add_row(Row::new(header.iter().map(|s| Cell::new(s)).collect()));
     for (test_name, row) in &results {
-        table.add_row(row![
-            *test_name,
-            row.get(0).map(|r| r.elapsed.as_micros().to_string()).unwrap_or("-".to_string()),
-            row.get(1).map(|r| r.elapsed.as_micros().to_string()).unwrap_or("-".to_string()),
-            row.get(2).map(|r| r.elapsed.as_micros().to_string()).unwrap_or("-".to_string()),
-        ]);
+        let mut cells = vec![test_name.to_string()];
+        for r in row {
+            cells.push(r.elapsed.as_micros().to_string());
+        }
+        table.add_row(Row::new(cells.iter().map(|s| Cell::new(s)).collect()));
     }
     table.printstd();
     assert!(results.iter().all(|(_, row)| row.iter().all(|r| r.success)), "Some providers failed");
