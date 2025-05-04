@@ -6,6 +6,7 @@ use serde::{Serialize, Deserialize};
 use std::ffi::OsStr;
 
 const ROOT_INODE: u64 = 1;
+const USER_INODE_START: u64 = 10; // user files/dirs start here to avoid reserved inodes
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 enum FileTypeRepr {
@@ -166,11 +167,16 @@ impl SqliteProvider {
             }
         }
         // Find max inode
-        let next_inode: u64 = conn.query_row(
+        let mut next_inode: u64 = conn.query_row(
             "SELECT MAX(ino) FROM files",
             [],
             |row| row.get::<_, Option<u64>>(0),
-        )?.unwrap_or(ROOT_INODE) + 1;
+        )?.unwrap_or(ROOT_INODE);
+        if next_inode < USER_INODE_START {
+            next_inode = USER_INODE_START;
+        } else {
+            next_inode += 1;
+        }
         Ok(Self { conn, next_inode, osx_mode })
     }
     fn alloc_inode(&mut self) -> u64 {

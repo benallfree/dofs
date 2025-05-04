@@ -5,6 +5,7 @@ use fuser;
 use serde::{Serialize, Deserialize};
 
 const ROOT_INODE: u64 = 1;
+const USER_INODE_START: u64 = 10; // user files/dirs start here to avoid reserved inodes
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 enum FileTypeRepr {
@@ -171,11 +172,16 @@ impl SqliteChunkedProvider {
             }
         }
         // Find max inode
-        let next_inode: u64 = conn.query_row(
+        let mut next_inode: u64 = conn.query_row(
             "SELECT MAX(ino) FROM files",
             [],
             |row| row.get::<_, Option<u64>>(0),
-        )?.unwrap_or(ROOT_INODE) + 1;
+        )?.unwrap_or(ROOT_INODE);
+        if next_inode < USER_INODE_START {
+            next_inode = USER_INODE_START;
+        } else {
+            next_inode += 1;
+        }
         Ok(Self { conn, next_inode, osx_mode: false, chunk_size: chunk_size.unwrap_or(4096) })
     }
     pub fn new_with_mode(db_path: &str, osx_mode: bool, chunk_size: usize) -> Result<Self> {
@@ -232,11 +238,16 @@ impl SqliteChunkedProvider {
             }
         }
         // Find max inode
-        let next_inode: u64 = conn.query_row(
+        let mut next_inode: u64 = conn.query_row(
             "SELECT MAX(ino) FROM files",
             [],
             |row| row.get::<_, Option<u64>>(0),
-        )?.unwrap_or(ROOT_INODE) + 1;
+        )?.unwrap_or(ROOT_INODE);
+        if next_inode < USER_INODE_START {
+            next_inode = USER_INODE_START;
+        } else {
+            next_inode += 1;
+        }
         Ok(Self { conn, next_inode, osx_mode, chunk_size })
     }
     #[allow(dead_code)]

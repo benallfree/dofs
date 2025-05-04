@@ -6,6 +6,7 @@ use fuser;
 use crate::providers::Provider;
 
 const ROOT_INODE: u64 = 1;
+const USER_INODE_START: u64 = 10;
 
 #[derive(Debug, Clone)]
 pub struct InMemoryFile {
@@ -67,7 +68,7 @@ impl MemoryProvider {
         });
         inodes.insert(ROOT_INODE, root);
         paths.insert(PathBuf::from("/"), ROOT_INODE);
-        Self { inodes, paths, next_inode: ROOT_INODE + 1, xattrs: HashMap::new(), osx_mode }
+        Self { inodes, paths, next_inode: USER_INODE_START, xattrs: HashMap::new(), osx_mode }
     }
     pub fn alloc_inode(&mut self) -> u64 {
         let ino = self.next_inode;
