@@ -23,7 +23,7 @@ struct StressTest {
 
 fn run_fuse_with_provider(provider: &str) -> std::process::Child {
     Command::new("cargo")
-        .args(["run", "--quiet", "--", "--provider", provider])
+        .args(["run", "--quiet", "--", "--mode-osx", "--provider", provider])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
