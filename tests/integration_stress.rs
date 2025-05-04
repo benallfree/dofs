@@ -1,6 +1,6 @@
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use std::fs::{self, File, create_dir, read_dir, remove_dir};
+use std::fs::{self, File, create_dir, read_dir, remove_dir, OpenOptions};
 use std::io::{Read, Write};
 use std::thread::sleep;
 use prettytable::{Table, row, cell};
@@ -83,6 +83,29 @@ fn dir_create_list_delete() -> Result<(), String> {
     Ok(())
 }
 
+fn file_append_read_delete() -> Result<(), String> {
+    // Create file and write initial data
+    let mut file = File::create(TEST_FILE).map_err(|e| format!("create: {e}"))?;
+    let data1 = vec![1u8; 512 * 1024];
+    file.write_all(&data1).map_err(|e| format!("write1: {e}"))?;
+    drop(file);
+    // Append data
+    let mut file = OpenOptions::new().append(true).open(TEST_FILE).map_err(|e| format!("open append: {e}"))?;
+    let data2 = vec![2u8; 512 * 1024];
+    file.write_all(&data2).map_err(|e| format!("write2: {e}"))?;
+    drop(file);
+    // Read back and check
+    let mut file = File::open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).map_err(|e| format!("read: {e}"))?;
+    if buf.len() != 1024 * 1024 || &buf[..512*1024] != &data1[..] || &buf[512*1024..] != &data2[..] {
+        return Err("data mismatch after append".to_string());
+    }
+    // Remove file
+    fs::remove_file(TEST_FILE).map_err(|e| format!("remove: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -93,6 +116,7 @@ fn integration_stress() {
     let stress_tests = [
         StressTest { name: "file_create_write_read_delete", func: file_create_write_read_delete },
         StressTest { name: "dir_create_list_delete", func: dir_create_list_delete },
+        StressTest { name: "file_append_read_delete", func: file_append_read_delete },
         // Add more tests here
     ];
     let mut results = vec![];
