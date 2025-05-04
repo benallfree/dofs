@@ -316,12 +316,14 @@ impl Provider for SqliteProvider {
     }
     fn readdir(&mut self, ino: u64, offset: i64, mut reply: fuser::ReplyDirectory) {
         let mut entries = vec![(ROOT_INODE, fuser::FileType::Directory, ".".to_string()), (ROOT_INODE, fuser::FileType::Directory, "..".to_string())];
-        let mut stmt = self.conn.prepare("SELECT ino, name, is_dir FROM files WHERE parent = ?1").unwrap();
+        let mut stmt = self.conn.prepare("SELECT ino, name, is_dir, attr FROM files WHERE parent = ?1").unwrap();
         let rows = stmt.query_map(params![ino], |row| {
             let ino: u64 = row.get(0)?;
             let name: String = row.get(1)?;
             let is_dir: i64 = row.get(2)?;
-            let kind = if is_dir == 1 { fuser::FileType::Directory } else { fuser::FileType::RegularFile };
+            let attr_blob: Vec<u8> = row.get(3)?;
+            let ser_attr: SerializableFileAttr = bincode::deserialize(&attr_blob).unwrap();
+            let kind = fuser::FileType::from(ser_attr.kind);
             Ok((ino, kind, name))
         }).unwrap();
         for row in rows {
@@ -479,10 +481,52 @@ impl Provider for SqliteProvider {
             reply.error(libc::EIO);
         }
     }
-    fn symlink(&mut self, _parent: u64, _name: &std::ffi::OsStr, _link: &std::path::Path, reply: fuser::ReplyEntry) {
-        reply.error(libc::ENOSYS);
+    fn symlink(&mut self, parent: u64, name: &OsStr, link: &std::path::Path, reply: fuser::ReplyEntry) {
+        let name_str = name.to_str().unwrap_or("");
+        if self.osx_mode && name_str.starts_with("._") {
+            reply.error(libc::EACCES);
+            return;
+        }
+        if self.get_child_ino(parent, name_str).is_some() {
+            reply.error(libc::EEXIST); return;
+        }
+        let ino = self.alloc_inode();
+        let now = SystemTime::now();
+        let target = link.to_string_lossy().to_string().into_bytes();
+        let attr = fuser::FileAttr {
+            ino,
+            size: target.len() as u64,
+            blocks: 0,
+            atime: now,
+            mtime: now,
+            ctime: now,
+            crtime: now,
+            kind: fuser::FileType::Symlink,
+            perm: 0o777,
+            nlink: 1,
+            uid: unsafe { libc::geteuid() },
+            gid: unsafe { libc::getegid() },
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        };
+        let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
+        let _ = self.conn.execute(
+            "INSERT INTO files (ino, name, parent, is_dir, data, attr) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![ino, name_str, parent, 0, target, attr_bytes],
+        );
+        reply.entry(&std::time::Duration::from_secs(1), &attr, 0);
     }
-    fn readlink(&mut self, _ino: u64, reply: fuser::ReplyData) {
-        reply.error(libc::ENOSYS);
+    fn readlink(&mut self, ino: u64, reply: fuser::ReplyData) {
+        let attr = self.get_attr(ino);
+        if let Some(attr) = attr {
+            if attr.kind == fuser::FileType::Symlink {
+                if let Some(data) = self.get_file_data(ino) {
+                    reply.data(&data);
+                    return;
+                }
+            }
+        }
+        reply.error(libc::EINVAL);
     }
 } 
