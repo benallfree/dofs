@@ -360,4 +360,46 @@ impl Provider for MemoryProvider {
             reply.error(libc::EISDIR);
         }
     }
+    fn rename(&mut self, parent: u64, name: &OsStr, newparent: u64, newname: &OsStr, _flags: u32, reply: fuser::ReplyEmpty) {
+        let name_str = name.to_str().unwrap_or("");
+        let newname_str = newname.to_str().unwrap_or("");
+        // Get source parent dir
+        let src_is_dir = matches!(self.inodes.get(&parent), Some(Node::Dir(_)));
+        let dst_is_dir = matches!(self.inodes.get(&newparent), Some(Node::Dir(_)));
+        if !src_is_dir || !dst_is_dir {
+            reply.error(libc::ENOTDIR);
+            return;
+        }
+        // Check source exists and get inode
+        let ino = {
+            let src_parent = match self.inodes.get(&parent) {
+                Some(Node::Dir(dir)) => dir,
+                _ => { reply.error(libc::ENOTDIR); return; }
+            };
+            match src_parent.children.get(name_str) {
+                Some(&ino) => ino,
+                None => { reply.error(libc::ENOENT); return; }
+            }
+        };
+        // Check dest exists
+        let dest_exists = {
+            let dst_parent = match self.inodes.get(&newparent) {
+                Some(Node::Dir(dir)) => dir,
+                _ => { reply.error(libc::ENOTDIR); return; }
+            };
+            dst_parent.children.contains_key(newname_str)
+        };
+        if dest_exists {
+            reply.error(libc::EEXIST);
+            return;
+        }
+        // Now do the mutation
+        if let Some(Node::Dir(src_parent)) = self.inodes.get_mut(&parent) {
+            src_parent.children.remove(name_str);
+        }
+        if let Some(Node::Dir(dst_parent)) = self.inodes.get_mut(&newparent) {
+            dst_parent.children.insert(newname_str.to_string(), ino);
+        }
+        reply.ok();
+    }
 } 
