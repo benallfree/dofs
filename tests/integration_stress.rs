@@ -267,14 +267,14 @@ fn integration_stress() {
             if r.success {
                 let t = r.elapsed.as_micros();
                 if t == min_time {
-                    cells.push(format!("{}", t));
+                    cells.push(format!("{} us", t));
                 } else {
                     let percent = if min_time > 0 {
                         ((t as f64 - min_time as f64) / min_time as f64 * 100.0).round() as i64
                     } else {
                         0
                     };
-                    cells.push(format!("{} (+{}%)", t, percent));
+                    cells.push(format!("{} us (+{}%)", t, percent));
                 }
             } else {
                 cells.push("\u{274C}".to_string());
