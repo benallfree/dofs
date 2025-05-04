@@ -44,6 +44,10 @@ impl Filesystem for FuseFS {
         self.provider.rmdir(parent, name, reply)
     }
     fn open(&mut self, _req: &Request<'_>, ino: u64, _flags: i32, reply: fuser::ReplyOpen) {
+        if ino == FUSE_READY_INO {
+            reply.opened(0, 0);
+            return;
+        }
         self.provider.open(ino, reply)
     }
     fn flush(&mut self, _req: &Request<'_>, ino: u64, _fh: u64, _lock_owner: u64, reply: fuser::ReplyEmpty) {
