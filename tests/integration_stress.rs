@@ -1,12 +1,13 @@
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use std::fs::{self, File};
+use std::fs::{self, File, create_dir, read_dir, remove_dir};
 use std::io::{Read, Write};
 use std::thread::sleep;
 use prettytable::{Table, row, cell};
 
 const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
+const TEST_DIR: &str = "./mnt/testdir";
 
 struct ProviderTestResult {
     provider: &'static str,
@@ -69,6 +70,19 @@ fn file_create_write_read_delete() -> Result<(), String> {
     Ok(())
 }
 
+fn dir_create_list_delete() -> Result<(), String> {
+    // Create directory
+    create_dir(TEST_DIR).map_err(|e| format!("create_dir: {e}"))?;
+    // List directory
+    let entries: Vec<_> = read_dir("./mnt").map_err(|e| format!("read_dir: {e}"))?.collect();
+    if !entries.iter().filter_map(|e| e.as_ref().ok()).any(|e| e.file_name() == "testdir") {
+        return Err("directory not found in listing".to_string());
+    }
+    // Remove directory
+    remove_dir(TEST_DIR).map_err(|e| format!("remove_dir: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -78,6 +92,7 @@ fn integration_stress() {
     ];
     let stress_tests = [
         StressTest { name: "file_create_write_read_delete", func: file_create_write_read_delete },
+        StressTest { name: "dir_create_list_delete", func: dir_create_list_delete },
         // Add more tests here
     ];
     let mut results = vec![];
