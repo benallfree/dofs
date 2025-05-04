@@ -414,6 +414,12 @@ impl SqliteChunkedProvider {
             blksize: 512,
         }
     }
+    fn insert_file(&self, ino: u64, name: &str, parent: u64, is_dir: bool, attr_bytes: Vec<u8>) {
+        let _ = self.conn.execute(
+            "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![ino, name, parent, if is_dir { 1 } else { 0 }, attr_bytes],
+        );
+    }
 }
 
 impl crate::providers::Provider for SqliteChunkedProvider {
@@ -536,10 +542,7 @@ impl crate::providers::Provider for SqliteChunkedProvider {
         let perm = (mode & !umask & 0o7777) as u16;
         let attr = Self::new_file_attr(ino, fuser::FileType::Directory, perm, 2, 0);
         let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
-        let _ = self.conn.execute(
-            "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![ino, name_str, parent, 1, attr_bytes],
-        );
+        self.insert_file(ino, name_str, parent, true, attr_bytes);
         reply.entry(&std::time::Duration::from_secs(1), &attr, 0);
     }
     fn create(&mut self, parent: u64, name: &OsStr, mode: u32, _flags: u32, umask: i32, reply: fuser::ReplyCreate) {
@@ -555,10 +558,7 @@ impl crate::providers::Provider for SqliteChunkedProvider {
         let perm = (mode & !(umask as u32) & 0o7777) as u16;
         let attr = Self::new_file_attr(ino, fuser::FileType::RegularFile, perm, 1, 0);
         let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
-        let _ = self.conn.execute(
-            "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![ino, name_str, parent, 0, attr_bytes],
-        );
+        self.insert_file(ino, name_str, parent, false, attr_bytes);
         reply.created(&std::time::Duration::from_secs(1), &attr, 0, 0, 0);
     }
     fn read(&mut self, ino: u64, offset: i64, size: u32, reply: fuser::ReplyData) {
