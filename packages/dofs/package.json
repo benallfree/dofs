@@ -1,13 +1,16 @@
 {
-  "name": "dofs",
-  "module": "src/index.ts",
-  "type": "module",
-  "devDependencies": {
-    "@types/bun": "latest",
-    "prettier": "^3.5.3",
-    "prettier-plugin-organize-imports": "^4.1.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5.8.3"
-  }
+	"name": "dofs",
+	"version": "0.0.1",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"cf-typegen": "wrangler types"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20250504.0",
+		"typescript": "^5.8.3",
+		"wrangler": "^4.14.1"
+	}
 }

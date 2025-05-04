@@ -1,20 +1,22 @@
 {
-    "name": "dofs-root",
-    "version": "0.0.1",
-    "private": true,
-    "scripts": {},
-    "prettier": {
-        "printWidth": 120,
-        "tabWidth": 4,
-        "useTabs": false,
-        "singleQuote": true,
-        "trailingComma": "es5",
-        "semi": false,
-        "plugins": [
-            "prettier-plugin-organize-imports"
-        ]
-    },
-    "workspaces": [
-        "packages/*"
+  "name": "dofs-root",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "format": "prettier --write ."
+  },
+  "prettier": {
+    "printWidth": 120,
+    "tabWidth": 2,
+    "useTabs": false,
+    "singleQuote": true,
+    "trailingComma": "es5",
+    "semi": false,
+    "plugins": [
+      "prettier-plugin-organize-imports"
     ]
+  },
+  "workspaces": [
+    "packages/*"
+  ]
 }
