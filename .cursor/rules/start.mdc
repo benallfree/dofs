@@ -3,8 +3,16 @@ description:
 globs: 
 alwaysApply: true
 ---
-* run `cargo build` after each change to be sure it compiles
-* run `cargo test` after each change to be sure it passes tests
+This is a monorepo.
+
 * fix errors without prompting
 * don't ask to proceed, just go
 * fix all warnings along the way without prompting
+
+## /packages/dofs-rust-client
+* run `cargo build` after each change to be sure it compiles
+* run `cargo test` after each change to be sure it passes tests
+
+## /packages/dofs
+
+## /packages/dofs-server

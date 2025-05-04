@@ -1,0 +1,5 @@
+target
+mnt
+*.db
+.DS_Store
+node_modules
