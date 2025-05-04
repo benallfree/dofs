@@ -31,13 +31,13 @@ fn run_fuse_with_provider(provider: &str) -> std::process::Child {
 }
 
 fn wait_for_mount() {
-    for _ in 0..20 {
-        if fs::metadata(MOUNTPOINT).is_ok() {
+    for _ in 0..40 {
+        if std::fs::metadata(format!("{}/.fuse_ready", MOUNTPOINT)).is_ok() {
             return;
         }
-        sleep(Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(100));
     }
-    panic!("Mountpoint not available");
+    panic!("Mountpoint not available or .fuse_ready not present");
 }
 
 fn unmount() {
