@@ -1,9 +1,7 @@
 use rusqlite::{params, Connection, Result, OptionalExtension};
 use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::time::SystemTime;
 use fuser;
-use crate::providers::Provider;
 use serde::{Serialize, Deserialize};
 
 const ROOT_INODE: u64 = 1;
@@ -118,6 +116,7 @@ pub struct SqliteChunkedProvider {
 }
 
 impl SqliteChunkedProvider {
+    #[allow(dead_code)]
     pub fn new(db_path: &str, chunk_size: Option<usize>) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         conn.execute_batch(
@@ -240,6 +239,7 @@ impl SqliteChunkedProvider {
         )?.unwrap_or(ROOT_INODE) + 1;
         Ok(Self { conn, next_inode, osx_mode, chunk_size })
     }
+    #[allow(dead_code)]
     fn get_file_data(&self, ino: u64) -> Option<Vec<u8>> {
         // Minimal stub: just return all chunks concatenated (not efficient, but placeholder)
         let mut stmt = self.conn.prepare("SELECT offset, data, length FROM chunks WHERE ino = ?1 ORDER BY offset ASC").ok()?;
@@ -259,6 +259,7 @@ impl SqliteChunkedProvider {
         }
         Some(data)
     }
+    #[allow(dead_code)]
     fn set_file_data(&self, ino: u64, data: &[u8]) {
         // Minimal stub: delete all chunks and insert a single chunk
         let _ = self.conn.execute("DELETE FROM chunks WHERE ino = ?1", params![ino]);
@@ -325,7 +326,7 @@ impl SqliteChunkedProvider {
     }
     fn write_file_data(&self, ino: u64, offset: usize, data: &[u8]) {
         let chunk_size = self.chunk_size;
-        let mut tx = self.conn.unchecked_transaction().unwrap();
+        let tx = self.conn.unchecked_transaction().unwrap();
         let mut written = 0;
         while written < data.len() {
             let abs_offset = offset + written;
@@ -366,7 +367,7 @@ impl SqliteChunkedProvider {
     }
     fn truncate_file(&self, ino: u64, size: u64) {
         let chunk_size = self.chunk_size as u64;
-        let mut tx = self.conn.unchecked_transaction().unwrap();
+        let tx = self.conn.unchecked_transaction().unwrap();
         // Delete all chunks past the new size
         let first_excess_chunk = (size / chunk_size) * chunk_size;
         let _ = tx.execute(
@@ -377,7 +378,7 @@ impl SqliteChunkedProvider {
         if size % chunk_size != 0 {
             let last_chunk_offset = (size / chunk_size) * chunk_size;
             let last_len = (size % chunk_size) as i64;
-            let mut chunk_data: Option<Vec<u8>> = tx.query_row(
+            let chunk_data: Option<Vec<u8>> = tx.query_row(
                 "SELECT data FROM chunks WHERE ino = ?1 AND offset = ?2",
                 params![ino, last_chunk_offset as i64],
                 |row| row.get(0),

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, BTreeMap};
 use std::path::PathBuf;
 use std::ffi::OsStr;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 use fuser;
 use crate::providers::Provider;
 
@@ -9,14 +9,12 @@ const ROOT_INODE: u64 = 1;
 
 #[derive(Debug, Clone)]
 pub struct InMemoryFile {
-    pub name: String,
     pub data: Vec<u8>,
     pub attr: fuser::FileAttr,
 }
 
 #[derive(Debug, Clone)]
 pub struct InMemoryDir {
-    pub name: String,
     pub children: BTreeMap<String, u64>,
     pub attr: fuser::FileAttr,
 }
@@ -29,13 +27,16 @@ pub enum Node {
 
 pub struct MemoryProvider {
     pub inodes: HashMap<u64, Node>,
+    #[allow(dead_code)]
     pub paths: HashMap<PathBuf, u64>,
     pub next_inode: u64,
+    #[allow(dead_code)]
     pub xattrs: HashMap<(u64, String), Vec<u8>>,
     pub osx_mode: bool,
 }
 
 impl MemoryProvider {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::new_with_mode(false)
     }
@@ -61,7 +62,6 @@ impl MemoryProvider {
             blksize: 512,
         };
         let root = Node::Dir(InMemoryDir {
-            name: "/".to_string(),
             children: BTreeMap::new(),
             attr: root_attr,
         });
@@ -257,7 +257,6 @@ impl Provider for MemoryProvider {
             blksize: 512,
         };
         let new_dir = Node::Dir(InMemoryDir {
-            name: name_str.to_string(),
             children: BTreeMap::new(),
             attr,
         });
@@ -267,7 +266,7 @@ impl Provider for MemoryProvider {
         self.inodes.insert(ino, new_dir);
         reply.entry(&std::time::Duration::from_secs(1), &attr, 0);
     }
-    fn create(&mut self, parent: u64, name: &OsStr, mode: u32, flags: u32, umask: i32, reply: fuser::ReplyCreate) {
+    fn create(&mut self, parent: u64, name: &OsStr, mode: u32, _flags: u32, umask: i32, reply: fuser::ReplyCreate) {
         let name_str = name.to_str().unwrap_or("");
         if self.osx_mode && name_str.starts_with("._") {
             reply.error(libc::EACCES);
@@ -303,7 +302,6 @@ impl Provider for MemoryProvider {
             blksize: 512,
         };
         let new_file = Node::File(InMemoryFile {
-            name: name_str.to_string(),
             data: vec![],
             attr,
         });

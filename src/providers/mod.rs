@@ -2,7 +2,7 @@ pub mod memory;
 pub mod sqlite_simple;
 pub mod sqlite_chunked;
 
-use fuser::{Request, ReplyAttr, ReplyEntry, ReplyDirectory, ReplyData, ReplyCreate, ReplyWrite};
+use fuser::{ReplyAttr, ReplyEntry, ReplyDirectory, ReplyData, ReplyCreate, ReplyWrite};
 use std::ffi::OsStr;
 
 pub trait Provider {

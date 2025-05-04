@@ -1,10 +1,9 @@
 use rusqlite::{params, Connection, Result, OptionalExtension};
-use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::time::SystemTime;
 use fuser;
 use crate::providers::Provider;
 use serde::{Serialize, Deserialize};
+use std::ffi::OsStr;
 
 const ROOT_INODE: u64 = 1;
 
@@ -117,6 +116,7 @@ pub struct SqliteProvider {
 }
 
 impl SqliteProvider {
+    #[allow(dead_code)]
     pub fn new(db_path: &str) -> Result<Self> {
         Self::new_with_mode(db_path, false)
     }
