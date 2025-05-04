@@ -7,6 +7,8 @@ use prettytable::{Table, Row, Cell};
 use libc;
 use std::os::unix::fs::symlink;
 use rand::{Rng, SeedableRng};
+use std::sync::{Arc, Barrier};
+use std::thread;
 
 const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
@@ -254,6 +256,36 @@ fn file_create_write_read_delete_large() -> Result<(), String> {
     file_create_write_read_delete_size(100 * 1024 * 1024)
 }
 
+fn concurrent_file_access() -> Result<(), String> {
+    let num_threads = 8;
+    let iterations = 1000;
+    let barrier = Arc::new(Barrier::new(num_threads));
+    // Create file
+    let mut file = File::create(TEST_FILE).map_err(|e| format!("create: {e}"))?;
+    file.write_all(&[0u8; 4096]).map_err(|e| format!("init write: {e}"))?;
+    drop(file);
+    let mut handles = vec![];
+    for tid in 0..num_threads {
+        let barrier = barrier.clone();
+        handles.push(thread::spawn(move || {
+            barrier.wait();
+            for i in 0..iterations {
+                let mut file = OpenOptions::new().read(true).write(true).open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
+                let pos = ((tid * 512 + i) % 4096) as u64;
+                file.seek(std::io::SeekFrom::Start(pos)).map_err(|e| format!("seek: {e}"))?;
+                let val = (tid as u8) ^ (i as u8);
+                file.write_all(&[val]).map_err(|e| format!("write: {e}"))?;
+            }
+            Ok::<(), String>(())
+        }));
+    }
+    for h in handles {
+        h.join().map_err(|_| "thread panic".to_string())??;
+    }
+    fs::remove_file(TEST_FILE).map_err(|e| format!("remove: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -270,6 +302,7 @@ fn integration_stress() {
         StressTest { name: "file_truncate_grow_read_delete", func: file_truncate_grow_read_delete, skip_providers: None },
         StressTest { name: "file_rename_check_delete", func: file_rename_check_delete, skip_providers: None },
         StressTest { name: "symlink_create_read_delete", func: symlink_create_read_delete, skip_providers: None },
+        StressTest { name: "concurrent_file_access", func: concurrent_file_access, skip_providers: None },
         // Add more tests here
     ];
     let mut results = vec![vec![]; stress_tests.len()];
