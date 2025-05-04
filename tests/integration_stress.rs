@@ -1,9 +1,9 @@
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
-use std::fs::{self, File, create_dir, read_dir, remove_dir, OpenOptions};
+use std::fs::{self, File, create_dir, read_dir, remove_dir, OpenOptions, rename, remove_file, metadata};
 use std::io::{Read, Write};
-use std::thread::sleep;
-use prettytable::{Table, row, cell, Row, Cell};
+use prettytable::{Table, Row, Cell};
+use libc;
 
 const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
@@ -40,8 +40,14 @@ fn wait_for_mount() {
     panic!("Mountpoint not available or .fuse_ready not present");
 }
 
-fn unmount() {
-    let _ = Command::new("umount").arg(MOUNTPOINT).output();
+fn wait_for_unmount() {
+    for _ in 0..40 {
+        if std::fs::metadata(format!("{}/.fuse_ready", MOUNTPOINT)).is_err() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    panic!("Mountpoint still present or .fuse_ready still exists");
 }
 
 fn clean_setup() {
@@ -114,7 +120,7 @@ fn file_truncate_shrink_read_delete() -> Result<(), String> {
     file.write_all(&data).map_err(|e| format!("write: {e}"))?;
     drop(file);
     // Truncate to half
-    let mut file = OpenOptions::new().write(true).open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
+    let file = OpenOptions::new().write(true).open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
     file.set_len(512 * 1024).map_err(|e| format!("truncate: {e}"))?;
     drop(file);
     // Read back and check
@@ -152,6 +158,21 @@ fn file_truncate_grow_read_delete() -> Result<(), String> {
     Ok(())
 }
 
+fn file_rename_check_delete() -> Result<(), String> {
+    const RENAMED_FILE: &str = "./mnt/testfile_renamed";
+    // Create file
+    let mut file = File::create(TEST_FILE).map_err(|e| format!("create: {e}"))?;
+    file.write_all(b"hello").map_err(|e| format!("write: {e}"))?;
+    drop(file);
+    // Rename file
+    rename(TEST_FILE, RENAMED_FILE).map_err(|e| format!("rename: {e}"))?;
+    // Check new name exists
+    metadata(RENAMED_FILE).map_err(|e| format!("metadata: {e}"))?;
+    // Remove file
+    remove_file(RENAMED_FILE).map_err(|e| format!("remove: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -165,6 +186,7 @@ fn integration_stress() {
         StressTest { name: "file_append_read_delete", func: file_append_read_delete },
         StressTest { name: "file_truncate_shrink_read_delete", func: file_truncate_shrink_read_delete },
         StressTest { name: "file_truncate_grow_read_delete", func: file_truncate_grow_read_delete },
+        StressTest { name: "file_rename_check_delete", func: file_rename_check_delete },
         // Add more tests here
     ];
     let mut results = vec![];
@@ -180,8 +202,12 @@ fn integration_stress() {
                 Err(e) => (false, Some(e)),
             };
             let elapsed = start.elapsed();
-            unmount();
-            let _ = child.kill();
+            // Send SIGINT for clean unmount
+            unsafe {
+                libc::kill(child.id() as i32, libc::SIGINT);
+            }
+            let _ = child.wait();
+            wait_for_unmount();
             row.push(ProviderTestResult {
                 provider: prov_name,
                 elapsed,
@@ -201,10 +227,34 @@ fn integration_stress() {
     for (test_name, row) in &results {
         let mut cells = vec![test_name.to_string()];
         for r in row {
-            cells.push(r.elapsed.as_micros().to_string());
+            if r.success {
+                cells.push(r.elapsed.as_micros().to_string());
+            } else {
+                // Unicode red X
+                cells.push("\u{274C}".to_string());
+            }
         }
         table.add_row(Row::new(cells.iter().map(|s| Cell::new(s)).collect()));
     }
     table.printstd();
+
+    // Print failure details table
+    let mut failure_table = Table::new();
+    failure_table.add_row(Row::new(vec![Cell::new("test"), Cell::new("provider"), Cell::new("reason")]));
+    for (test_name, row) in &results {
+        for r in row {
+            if !r.success {
+                failure_table.add_row(Row::new(vec![
+                    Cell::new(test_name),
+                    Cell::new(r.provider),
+                    Cell::new(r.error.as_deref().unwrap_or("unknown error")),
+                ]));
+            }
+        }
+    }
+    if failure_table.len() > 1 {
+        println!("\nFailure details:");
+        failure_table.printstd();
+    }
     assert!(results.iter().all(|(_, row)| row.iter().all(|r| r.success)), "Some providers failed");
 } 
