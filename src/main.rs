@@ -23,6 +23,8 @@ struct Cli {
     chunk_size: usize,
     #[arg(long, default_value = "./mnt")]
     mountpoint: String,
+    #[arg(long, default_value = "")]
+    db_path: String,
 }
 
 fn main() {
@@ -32,6 +34,11 @@ fn main() {
     let osx_mode = cli.mode_osx;
     let chunk_size = cli.chunk_size;
     let mountpoint = cli.mountpoint.as_str();
+    let db_path = if cli.db_path.is_empty() {
+        None
+    } else {
+        Some(cli.db_path.as_str())
+    };
     if std::path::Path::new(mountpoint).exists() {
         // Try to unmount in case it was left mounted from a previous panic
         let _ = Command::new("umount").arg(mountpoint).status();
@@ -62,12 +69,14 @@ fn main() {
     let fs: FuseFS = match provider_name {
         "sqlite_simple" => {
             println!("Using SQLite Simple provider");
-            let sqlite = SqliteSimpleProvider::new_with_mode("cf-fuse-simple.db", osx_mode).expect("Failed to open SQLite DB");
+            let db_file = db_path.unwrap_or("cf-fuse-simple.db");
+            let sqlite = SqliteSimpleProvider::new_with_mode(db_file, osx_mode).expect("Failed to open SQLite DB");
             FuseFS::new(Box::new(sqlite))
         },
         "sqlite_chunked" => {
             println!("Using SQLite Chunked provider");
-            let sqlite = SqliteChunkedProvider::new_with_mode("cf-fuse-chunked.db", osx_mode, chunk_size).expect("Failed to open SQLite DB");
+            let db_file = db_path.unwrap_or("cf-fuse-chunked.db");
+            let sqlite = SqliteChunkedProvider::new_with_mode(db_file, osx_mode, chunk_size).expect("Failed to open SQLite DB");
             FuseFS::new(Box::new(sqlite))
         },
         _ => {

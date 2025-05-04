@@ -21,10 +21,13 @@ struct StressTest {
     func: fn() -> Result<(), String>,
 }
 
-fn run_fuse_with_provider(provider: &str) -> std::process::Child {
-    Command::new("cargo")
-        .args(["run", "--quiet", "--", "--mode-osx", "--provider", provider])
-        .stdout(Stdio::null())
+fn run_fuse_with_provider(provider: &str, db_path: Option<&str>) -> std::process::Child {
+    let mut cmd = Command::new("cargo");
+    cmd.args(["run", "--quiet", "--", "--mode-osx", "--provider", provider]);
+    if let Some(path) = db_path {
+        cmd.args(["--db-path", path]);
+    }
+    cmd.stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .expect("Failed to start fuse process")
@@ -54,9 +57,12 @@ fn wait_for_unmount() {
     panic!("Mountpoint still present or .fuse_ready still exists");
 }
 
-fn clean_setup() {
+fn clean_setup(db_path: Option<&str>) {
     let _ = fs::remove_file("cf-fuse-simple.db");
     let _ = fs::remove_file("cf-fuse-chunked.db");
+    if let Some(path) = db_path {
+        let _ = fs::remove_file(path);
+    }
     let _ = fs::remove_dir_all(MOUNTPOINT);
     let _ = fs::create_dir_all(MOUNTPOINT);
 }
@@ -180,9 +186,9 @@ fn file_rename_check_delete() -> Result<(), String> {
 #[test]
 fn integration_stress() {
     let providers = [
-        ("memory", "MemoryProvider"),
-        ("sqlite_simple", "SqliteSimpleProvider"),
-        ("sqlite_chunked", "SqliteChunkedProvider"),
+        ("memory", "MemoryProvider", None),
+        ("sqlite_simple", "SqliteSimpleProvider", Some("test-sqlite-simple.db")),
+        ("sqlite_chunked", "SqliteChunkedProvider", Some("test-sqlite-chunked.db")),
     ];
     let stress_tests = [
         StressTest { name: "file_create_write_read_delete", func: file_create_write_read_delete },
@@ -194,9 +200,9 @@ fn integration_stress() {
         // Add more tests here
     ];
     let mut results = vec![vec![]; stress_tests.len()];
-    for (prov_idx, (prov, prov_name)) in providers.iter().enumerate() {
-        clean_setup();
-        let mut child = run_fuse_with_provider(prov);
+    for (prov_idx, (prov, prov_name, db_path)) in providers.iter().enumerate() {
+        clean_setup(*db_path);
+        let mut child = run_fuse_with_provider(prov, *db_path);
         wait_for_mount();
         for (test_idx, test) in stress_tests.iter().enumerate() {
             println!("running test: {} with provider: {}", test.name, prov_name);
@@ -221,7 +227,7 @@ fn integration_stress() {
     // Print summary table
     let mut table = Table::new();
     let mut header = vec!["operation".to_string()];
-    for (_, prov_name) in providers.iter() {
+    for (_, prov_name, _) in providers.iter() {
         header.push(prov_name.to_string());
     }
     table.add_row(Row::new(header.iter().map(|s| Cell::new(s)).collect()));
@@ -243,7 +249,7 @@ fn integration_stress() {
     let mut failure_table = Table::new();
     failure_table.add_row(Row::new(vec![Cell::new("test"), Cell::new("provider"), Cell::new("reason")]));
     for (test_idx, test) in stress_tests.iter().enumerate() {
-        for (prov_idx, (_, prov_name)) in providers.iter().enumerate() {
+        for (prov_idx, (_, prov_name, _)) in providers.iter().enumerate() {
             let r = &results[test_idx][prov_idx];
             if !r.success {
                 failure_table.add_row(Row::new(vec![
@@ -259,4 +265,8 @@ fn integration_stress() {
         failure_table.printstd();
     }
     assert!(results.iter().all(|row| row.iter().all(|r| r.success)), "Some providers failed");
+
+    // Final cleanup: remove test DBs if present
+    let _ = std::fs::remove_file("test-sqlite-simple.db");
+    let _ = std::fs::remove_file("test-sqlite-chunked.db");
 } 
