@@ -32,6 +32,10 @@ fn main() {
             mountpoint = rest;
         }
     }
+    if std::path::Path::new(mountpoint).exists() {
+        // Try to unmount in case it was left mounted from a previous panic
+        let _ = Command::new("umount").arg(mountpoint).status();
+    }
     if !std::path::Path::new(mountpoint).exists() {
         fs::create_dir_all(mountpoint).expect("Failed to create mountpoint");
     }
