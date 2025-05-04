@@ -630,4 +630,41 @@ impl crate::providers::Provider for SqliteChunkedProvider {
         self.delete_file_chunks(ino);
         reply.ok();
     }
+    fn rename(&mut self, parent: u64, name: &OsStr, newparent: u64, newname: &OsStr, _flags: u32, reply: fuser::ReplyEmpty) {
+        let name_str = name.to_str().unwrap_or("");
+        let newname_str = newname.to_str().unwrap_or("");
+        // Find the inode to move
+        let ino = match self.get_child_ino(parent, name_str) {
+            Some(ino) => ino,
+            None => { reply.error(libc::ENOENT); return; }
+        };
+        // If destination exists, remove it (file or empty dir)
+        if let Some(dest_ino) = self.get_child_ino(newparent, newname_str) {
+            // Check if it's a directory and not empty
+            if let Some(attr) = self.get_attr(dest_ino) {
+                if attr.kind == fuser::FileType::Directory && !self.is_dir_empty(dest_ino) {
+                    reply.error(libc::ENOTEMPTY);
+                    return;
+                }
+            }
+            let _ = self.conn.execute("DELETE FROM files WHERE ino = ?1", params![dest_ino]);
+            let _ = self.conn.execute("DELETE FROM files WHERE parent = ?1 AND name = ?2", params![newparent, newname_str]);
+            self.delete_file_chunks(dest_ino);
+        }
+        // Update the file's parent and name
+        let res = self.conn.execute(
+            "UPDATE files SET parent = ?1, name = ?2 WHERE ino = ?3",
+            params![newparent, newname_str, ino],
+        );
+        if res.is_ok() {
+            // Remove the old name entry if parent/name changed
+            let _ = self.conn.execute(
+                "DELETE FROM files WHERE parent = ?1 AND name = ?2 AND ino != ?3",
+                params![parent, name_str, ino],
+            );
+            reply.ok();
+        } else {
+            reply.error(libc::EIO);
+        }
+    }
 } 
