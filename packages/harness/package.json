@@ -1,0 +1,16 @@
+{
+  "name": "dofs-harness",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250504.0",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.14.1"
+  }
+}

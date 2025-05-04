@@ -1,16 +1,26 @@
 {
-	"name": "dofs",
-	"version": "0.0.1",
-	"private": true,
-	"scripts": {
-		"deploy": "wrangler deploy",
-		"dev": "wrangler dev",
-		"start": "wrangler dev",
-		"cf-typegen": "wrangler types"
-	},
-	"devDependencies": {
-		"@cloudflare/workers-types": "^4.20250504.0",
-		"typescript": "^5.8.3",
-		"wrangler": "^4.14.1"
-	}
+  "name": "dofs",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "cf-typegen": "wrangler types",
+    "build": "tsup src/DurableObjectFs.ts --format esm --dts --external cloudflare:workers --out-dir dist"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "wrangler": "^4.14.1"
+  },
+  "main": "./dist/DurableObjectFs.mjs",
+  "module": "./dist/DurableObjectFs.mjs",
+  "types": "./dist/DurableObjectFs.d.mts",
+  "exports": {
+    ".": {
+      "import": "./dist/DurableObjectFs.mjs",
+      "types": "./dist/DurableObjectFs.d.mts"
+    }
+  },
+  "packageManager": "bun@1.1.13"
 }

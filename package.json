@@ -18,5 +18,8 @@
   },
   "workspaces": [
     "packages/*"
-  ]
+  ],
+  "devDependencies": {
+    "tsup": "^8.4.0"
+  }
 }

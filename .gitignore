@@ -3,3 +3,5 @@ mnt
 *.db
 .DS_Store
 node_modules
+.wrangler
+dist
