@@ -310,6 +310,45 @@ fn dir_rename_check_delete() -> Result<(), String> {
     Ok(())
 }
 
+fn nested_dir_create_write_read_recursive_delete() -> Result<(), String> {
+    let dir1 = "./mnt/dir1";
+    let dir2 = "./mnt/dir1/dir2";
+    let dir3 = "./mnt/dir1/dir2/dir3";
+    let file1 = format!("{}/file1", dir1);
+    let file2 = format!("{}/file2", dir2);
+    let file3 = format!("{}/file3", dir3);
+    // Create nested directories
+    fs::create_dir_all(&dir3).map_err(|e| format!("create_dir_all: {e}"))?;
+    // Create files at each level
+    let mut f1 = File::create(&file1).map_err(|e| format!("create file1: {e}"))?;
+    let mut f2 = File::create(&file2).map_err(|e| format!("create file2: {e}"))?;
+    let mut f3 = File::create(&file3).map_err(|e| format!("create file3: {e}"))?;
+    f1.write_all(b"file1 data").map_err(|e| format!("write file1: {e}"))?;
+    f2.write_all(b"file2 data").map_err(|e| format!("write file2: {e}"))?;
+    f3.write_all(b"file3 data").map_err(|e| format!("write file3: {e}"))?;
+    drop((f1, f2, f3));
+    // Read back and check
+    let mut buf = String::new();
+    File::open(&file1).map_err(|e| format!("open file1: {e}"))?.read_to_string(&mut buf).map_err(|e| format!("read file1: {e}"))?;
+    if buf != "file1 data" { return Err("file1 content mismatch".to_string()); }
+    buf.clear();
+    File::open(&file2).map_err(|e| format!("open file2: {e}"))?.read_to_string(&mut buf).map_err(|e| format!("read file2: {e}"))?;
+    if buf != "file2 data" { return Err("file2 content mismatch".to_string()); }
+    buf.clear();
+    File::open(&file3).map_err(|e| format!("open file3: {e}"))?.read_to_string(&mut buf).map_err(|e| format!("read file3: {e}"))?;
+    if buf != "file3 data" { return Err("file3 content mismatch".to_string()); }
+    // Recursively delete top-level directory
+    fs::remove_dir_all(dir1).map_err(|e| format!("remove_dir_all: {e}"))?;
+    // Verify all gone
+    if fs::metadata(dir1).is_ok() || fs::metadata(dir2).is_ok() || fs::metadata(dir3).is_ok() {
+        return Err("directories not fully deleted".to_string());
+    }
+    if fs::metadata(&file1).is_ok() || fs::metadata(&file2).is_ok() || fs::metadata(&file3).is_ok() {
+        return Err("files not fully deleted".to_string());
+    }
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -328,6 +367,7 @@ fn integration_stress() {
         StressTest { name: "symlink_create_read_delete", func: symlink_create_read_delete, skip_providers: None },
         StressTest { name: "concurrent_file_access", func: concurrent_file_access, skip_providers: None },
         StressTest { name: "dir_rename_check_delete", func: dir_rename_check_delete, skip_providers: None },
+        StressTest { name: "nested_dir_create_write_read_recursive_delete", func: nested_dir_create_write_read_recursive_delete, skip_providers: None },
         // Add more tests here
     ];
     let mut results = vec![vec![]; stress_tests.len()];
