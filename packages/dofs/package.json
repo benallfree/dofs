@@ -7,7 +7,8 @@
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "cf-typegen": "wrangler types",
-    "build": "tsup src/DurableObjectFs.ts --format esm --dts --external cloudflare:workers --out-dir dist"
+    "build": "tsup",
+    "watch": "tsup --watch"
   },
   "devDependencies": {
     "tsup": "^8.4.0",
