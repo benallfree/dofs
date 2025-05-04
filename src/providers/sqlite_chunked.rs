@@ -394,6 +394,26 @@ impl SqliteChunkedProvider {
         ).unwrap_or(0);
         count == 0
     }
+    fn new_file_attr(ino: u64, kind: fuser::FileType, perm: u16, nlink: u32, size: u64) -> fuser::FileAttr {
+        let now = SystemTime::now();
+        fuser::FileAttr {
+            ino,
+            size,
+            blocks: 0,
+            atime: now,
+            mtime: now,
+            ctime: now,
+            crtime: now,
+            kind,
+            perm,
+            nlink,
+            uid: unsafe { libc::geteuid() },
+            gid: unsafe { libc::getegid() },
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        }
+    }
 }
 
 impl crate::providers::Provider for SqliteChunkedProvider {
@@ -513,24 +533,8 @@ impl crate::providers::Provider for SqliteChunkedProvider {
             reply.error(libc::EEXIST); return;
         }
         let ino = self.alloc_inode();
-        let now = SystemTime::now();
-        let attr = fuser::FileAttr {
-            ino,
-            size: 0,
-            blocks: 0,
-            atime: now,
-            mtime: now,
-            ctime: now,
-            crtime: now,
-            kind: fuser::FileType::Directory,
-            perm: (mode & !umask & 0o7777) as u16,
-            nlink: 2,
-            uid: unsafe { libc::geteuid() },
-            gid: unsafe { libc::getegid() },
-            rdev: 0,
-            flags: 0,
-            blksize: 512,
-        };
+        let perm = (mode & !umask & 0o7777) as u16;
+        let attr = Self::new_file_attr(ino, fuser::FileType::Directory, perm, 2, 0);
         let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
         let _ = self.conn.execute(
             "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -548,24 +552,8 @@ impl crate::providers::Provider for SqliteChunkedProvider {
             reply.error(libc::EEXIST); return;
         }
         let ino = self.alloc_inode();
-        let now = SystemTime::now();
-        let attr = fuser::FileAttr {
-            ino,
-            size: 0,
-            blocks: 0,
-            atime: now,
-            mtime: now,
-            ctime: now,
-            crtime: now,
-            kind: fuser::FileType::RegularFile,
-            perm: (mode & !(umask as u32) & 0o7777) as u16,
-            nlink: 1,
-            uid: unsafe { libc::geteuid() },
-            gid: unsafe { libc::getegid() },
-            rdev: 0,
-            flags: 0,
-            blksize: 512,
-        };
+        let perm = (mode & !(umask as u32) & 0o7777) as u16;
+        let attr = Self::new_file_attr(ino, fuser::FileType::RegularFile, perm, 1, 0);
         let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
         let _ = self.conn.execute(
             "INSERT INTO files (ino, name, parent, is_dir, attr) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -651,25 +639,8 @@ impl crate::providers::Provider for SqliteChunkedProvider {
             reply.error(libc::EEXIST); return;
         }
         let ino = self.alloc_inode();
-        let now = SystemTime::now();
         let target = link.to_string_lossy().to_string().into_bytes();
-        let attr = fuser::FileAttr {
-            ino,
-            size: target.len() as u64,
-            blocks: 0,
-            atime: now,
-            mtime: now,
-            ctime: now,
-            crtime: now,
-            kind: fuser::FileType::Symlink,
-            perm: 0o777,
-            nlink: 1,
-            uid: unsafe { libc::geteuid() },
-            gid: unsafe { libc::getegid() },
-            rdev: 0,
-            flags: 0,
-            blksize: 512,
-        };
+        let attr = Self::new_file_attr(ino, fuser::FileType::Symlink, 0o777, 1, target.len() as u64);
         let attr_bytes = bincode::serialize(&SerializableFileAttr::from(&attr)).unwrap();
         let _ = self.conn.execute(
             "INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
