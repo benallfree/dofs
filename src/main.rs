@@ -10,28 +10,28 @@ use fusefs::FuseFS;
 use providers::memory::MemoryProvider;
 use providers::sqlite_simple::SqliteProvider as SqliteSimpleProvider;
 use providers::sqlite_chunked::SqliteChunkedProvider;
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[arg(long, default_value = "memory")]
+    provider: String,
+    #[arg(long, default_value_t = false)]
+    mode_osx: bool,
+    #[arg(long, default_value_t = 4096)]
+    chunk_size: usize,
+    #[arg(long, default_value = "./mnt")]
+    mountpoint: String,
+}
 
 fn main() {
     TermLogger::init(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).unwrap();
-    let args: Vec<String> = std::env::args().collect();
-    let mut provider_name = "memory";
-    let mut osx_mode = false;
-    let mut chunk_size = 4096;
-    let mut mountpoint = "./mnt";
-    for arg in &args {
-        if let Some(rest) = arg.strip_prefix("--provider=") {
-            provider_name = rest;
-        }
-        if arg == "--mode=osx" {
-            osx_mode = true;
-        }
-        if let Some(rest) = arg.strip_prefix("--chunk_size=") {
-            chunk_size = rest.parse().unwrap_or(4096);
-        }
-        if let Some(rest) = arg.strip_prefix("--mountpoint=") {
-            mountpoint = rest;
-        }
-    }
+    let cli = Cli::parse();
+    let provider_name = cli.provider.as_str();
+    let osx_mode = cli.mode_osx;
+    let chunk_size = cli.chunk_size;
+    let mountpoint = cli.mountpoint.as_str();
     if std::path::Path::new(mountpoint).exists() {
         // Try to unmount in case it was left mounted from a previous panic
         let _ = Command::new("umount").arg(mountpoint).status();
