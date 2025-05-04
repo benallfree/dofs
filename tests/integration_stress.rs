@@ -286,6 +286,30 @@ fn concurrent_file_access() -> Result<(), String> {
     Ok(())
 }
 
+fn dir_rename_check_delete() -> Result<(), String> {
+    const DIR1: &str = "./mnt/testdir1";
+    const DIR2: &str = "./mnt/testdir2";
+    const FILE_IN_DIR: &str = "./mnt/testdir1/file";
+    // Create directory and file inside
+    create_dir(DIR1).map_err(|e| format!("create_dir: {e}"))?;
+    let mut file = File::create(FILE_IN_DIR).map_err(|e| format!("create file: {e}"))?;
+    file.write_all(b"dir rename test").map_err(|e| format!("write: {e}"))?;
+    drop(file);
+    // Rename directory
+    rename(DIR1, DIR2).map_err(|e| format!("rename dir: {e}"))?;
+    // Check file is accessible at new path
+    let mut file = File::open("./mnt/testdir2/file").map_err(|e| format!("open after rename: {e}"))?;
+    let mut buf = String::new();
+    file.read_to_string(&mut buf).map_err(|e| format!("read: {e}"))?;
+    if buf != "dir rename test" {
+        return Err("file content mismatch after dir rename".to_string());
+    }
+    // Remove file and directory
+    fs::remove_file("./mnt/testdir2/file").map_err(|e| format!("remove file: {e}"))?;
+    remove_dir(DIR2).map_err(|e| format!("remove dir: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -303,6 +327,7 @@ fn integration_stress() {
         StressTest { name: "file_rename_check_delete", func: file_rename_check_delete, skip_providers: None },
         StressTest { name: "symlink_create_read_delete", func: symlink_create_read_delete, skip_providers: None },
         StressTest { name: "concurrent_file_access", func: concurrent_file_access, skip_providers: None },
+        StressTest { name: "dir_rename_check_delete", func: dir_rename_check_delete, skip_providers: None },
         // Add more tests here
     ];
     let mut results = vec![vec![]; stress_tests.len()];
