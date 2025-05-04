@@ -17,6 +17,7 @@ fn main() {
     let mut provider_name = "memory";
     let mut osx_mode = false;
     let mut chunk_size = 4096;
+    let mut mountpoint = "./mnt";
     for arg in &args {
         if let Some(rest) = arg.strip_prefix("--provider=") {
             provider_name = rest;
@@ -27,8 +28,10 @@ fn main() {
         if let Some(rest) = arg.strip_prefix("--chunk_size=") {
             chunk_size = rest.parse().unwrap_or(4096);
         }
+        if let Some(rest) = arg.strip_prefix("--mountpoint=") {
+            mountpoint = rest;
+        }
     }
-    let mountpoint = "./mnt";
     if !std::path::Path::new(mountpoint).exists() {
         fs::create_dir_all(mountpoint).expect("Failed to create mountpoint");
     }
