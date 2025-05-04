@@ -127,16 +127,19 @@ impl SqliteChunkedProvider {
                 parent INTEGER,
                 is_dir INTEGER NOT NULL,
                 attr BLOB
-            );"
-        )?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS chunks (
+            );
+            CREATE TABLE IF NOT EXISTS chunks (
                 ino INTEGER NOT NULL,
                 offset INTEGER NOT NULL,
                 data BLOB,
                 length INTEGER NOT NULL,
                 PRIMARY KEY (ino, offset)
-            );"
+            );
+            CREATE INDEX IF NOT EXISTS idx_files_parent_name ON files(parent, name);
+            CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent);
+            CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
+            CREATE INDEX IF NOT EXISTS idx_chunks_ino ON chunks(ino);
+            CREATE INDEX IF NOT EXISTS idx_chunks_ino_offset ON chunks(ino, offset);"
         )?;
         // Ensure root exists
         {
@@ -192,7 +195,12 @@ impl SqliteChunkedProvider {
                 data BLOB NOT NULL,
                 length INTEGER NOT NULL,
                 PRIMARY KEY (ino, offset)
-            );"
+            );
+            CREATE INDEX IF NOT EXISTS idx_files_parent_name ON files(parent, name);
+            CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent);
+            CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
+            CREATE INDEX IF NOT EXISTS idx_chunks_ino ON chunks(ino);
+            CREATE INDEX IF NOT EXISTS idx_chunks_ino_offset ON chunks(ino, offset);"
         )?;
         // Ensure root exists
         {

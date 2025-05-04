@@ -130,7 +130,10 @@ impl SqliteProvider {
                 is_dir INTEGER NOT NULL,
                 data BLOB,
                 attr BLOB
-            );"
+            );
+            CREATE INDEX IF NOT EXISTS idx_files_parent_name ON files(parent, name);
+            CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent);
+            CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);"
         )?;
         // Ensure root exists
         {
