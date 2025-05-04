@@ -117,11 +117,7 @@ pub struct SqliteChunkedProvider {
 }
 
 impl SqliteChunkedProvider {
-    #[allow(dead_code)]
-    pub fn new(db_path: &str, chunk_size: Option<usize>) -> Result<Self> {
-        let conn = Connection::open(db_path)?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS files (
+    const SCHEMA: &'static str = "CREATE TABLE IF NOT EXISTS files (
                 ino INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 parent INTEGER,
@@ -132,7 +128,7 @@ impl SqliteChunkedProvider {
             CREATE TABLE IF NOT EXISTS chunks (
                 ino INTEGER NOT NULL,
                 offset INTEGER NOT NULL,
-                data BLOB,
+                data BLOB NOT NULL,
                 length INTEGER NOT NULL,
                 PRIMARY KEY (ino, offset)
             );
@@ -140,8 +136,11 @@ impl SqliteChunkedProvider {
             CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent);
             CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
             CREATE INDEX IF NOT EXISTS idx_chunks_ino ON chunks(ino);
-            CREATE INDEX IF NOT EXISTS idx_chunks_ino_offset ON chunks(ino, offset);"
-        )?;
+            CREATE INDEX IF NOT EXISTS idx_chunks_ino_offset ON chunks(ino, offset);";
+    #[allow(dead_code)]
+    pub fn new(db_path: &str, chunk_size: Option<usize>) -> Result<Self> {
+        let conn = Connection::open(db_path)?;
+        conn.execute_batch(Self::SCHEMA)?;
         // Ensure root exists
         {
             let mut stmt = conn.prepare("SELECT COUNT(*) FROM files WHERE ino = ?1")?;
@@ -187,28 +186,7 @@ impl SqliteChunkedProvider {
     }
     pub fn new_with_mode(db_path: &str, osx_mode: bool, chunk_size: usize) -> Result<Self> {
         let conn = Connection::open(db_path)?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS files (
-                ino INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                parent INTEGER,
-                is_dir INTEGER NOT NULL,
-                attr BLOB,
-                data BLOB
-            );
-            CREATE TABLE IF NOT EXISTS chunks (
-                ino INTEGER NOT NULL,
-                offset INTEGER NOT NULL,
-                data BLOB NOT NULL,
-                length INTEGER NOT NULL,
-                PRIMARY KEY (ino, offset)
-            );
-            CREATE INDEX IF NOT EXISTS idx_files_parent_name ON files(parent, name);
-            CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent);
-            CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
-            CREATE INDEX IF NOT EXISTS idx_chunks_ino ON chunks(ino);
-            CREATE INDEX IF NOT EXISTS idx_chunks_ino_offset ON chunks(ino, offset);"
-        )?;
+        conn.execute_batch(Self::SCHEMA)?;
         // Ensure root exists
         {
             let mut stmt = conn.prepare("SELECT COUNT(*) FROM files WHERE ino = ?1")?;
