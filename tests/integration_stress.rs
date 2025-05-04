@@ -2,9 +2,11 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use std::fs::{self, File, create_dir, read_dir, remove_dir, OpenOptions, rename, remove_file, metadata};
 use std::io::{Read, Write};
+use std::io::Seek;
 use prettytable::{Table, Row, Cell};
 use libc;
 use std::os::unix::fs::symlink;
+use rand::{Rng, SeedableRng};
 
 const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
@@ -219,6 +221,29 @@ fn file_create_write_read_delete_size(size: usize) -> Result<(), String> {
     if buf != data {
         return Err("data mismatch".to_string());
     }
+    drop(file);
+    // Random access write: overwrite 10 random positions with unique values
+    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+    let mut file = std::fs::OpenOptions::new().read(true).write(true).open(TEST_FILE).map_err(|e| format!("open for random write: {e}"))?;
+    let mut random_indices = vec![];
+    for i in 0..10 {
+        let idx = rng.gen_range(0..size);
+        random_indices.push(idx);
+        file.seek(std::io::SeekFrom::Start(idx as u64)).map_err(|e| format!("seek: {e}"))?;
+        file.write_all(&[i as u8]).map_err(|e| format!("random write: {e}"))?;
+    }
+    drop(file);
+    // Random access read: verify the 10 random positions
+    let mut file = std::fs::OpenOptions::new().read(true).open(TEST_FILE).map_err(|e| format!("open for random read: {e}"))?;
+    for (i, &idx) in random_indices.iter().enumerate() {
+        file.seek(std::io::SeekFrom::Start(idx as u64)).map_err(|e| format!("seek: {e}"))?;
+        let mut b = [0u8; 1];
+        file.read_exact(&mut b).map_err(|e| format!("random read: {e}"))?;
+        if b[0] != i as u8 {
+            return Err(format!("random access data mismatch at {idx}: expected {} got {}", i as u8, b[0]));
+        }
+    }
+    drop(file);
     // Remove file
     fs::remove_file(TEST_FILE).map_err(|e| format!("remove: {e}"))?;
     Ok(())
