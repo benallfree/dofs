@@ -103,4 +103,10 @@ impl Filesystem for FuseFS {
     fn rename(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, newparent: u64, newname: &OsStr, flags: u32, reply: fuser::ReplyEmpty) {
         self.provider.rename(parent, name, newparent, newname, flags, reply)
     }
+    fn symlink(&mut self, _req: &Request<'_>, parent: u64, name: &OsStr, link: &std::path::Path, reply: ReplyEntry) {
+        self.provider.symlink(parent, name, link, reply)
+    }
+    fn readlink(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyData) {
+        self.provider.readlink(ino, reply)
+    }
 } 

@@ -667,4 +667,10 @@ impl crate::providers::Provider for SqliteChunkedProvider {
             reply.error(libc::EIO);
         }
     }
+    fn symlink(&mut self, _parent: u64, _name: &std::ffi::OsStr, _link: &std::path::Path, reply: fuser::ReplyEntry) {
+        reply.error(libc::ENOSYS);
+    }
+    fn readlink(&mut self, _ino: u64, reply: fuser::ReplyData) {
+        reply.error(libc::ENOSYS);
+    }
 } 

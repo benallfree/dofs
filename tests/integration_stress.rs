@@ -4,6 +4,7 @@ use std::fs::{self, File, create_dir, read_dir, remove_dir, OpenOptions, rename,
 use std::io::{Read, Write};
 use prettytable::{Table, Row, Cell};
 use libc;
+use std::os::unix::fs::symlink;
 
 const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
@@ -183,6 +184,26 @@ fn file_rename_check_delete() -> Result<(), String> {
     Ok(())
 }
 
+fn symlink_create_read_delete() -> Result<(), String> {
+    const SYMLINK_PATH: &str = "./mnt/testfile_symlink";
+    // Create file to point to
+    let mut file = File::create(TEST_FILE).map_err(|e| format!("create: {e}"))?;
+    file.write_all(b"symlink target").map_err(|e| format!("write: {e}"))?;
+    drop(file);
+    // Create symlink
+    symlink(TEST_FILE, SYMLINK_PATH).map_err(|e| format!("symlink: {e}"))?;
+    // Read symlink
+    let target = fs::read_link(SYMLINK_PATH).map_err(|e| format!("read_link: {e}"))?;
+    if target != std::path::Path::new(TEST_FILE) {
+        return Err("symlink target mismatch".to_string());
+    }
+    // Remove symlink
+    fs::remove_file(SYMLINK_PATH).map_err(|e| format!("remove symlink: {e}"))?;
+    // Remove target file
+    fs::remove_file(TEST_FILE).map_err(|e| format!("remove: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -197,10 +218,11 @@ fn integration_stress() {
         StressTest { name: "file_truncate_shrink_read_delete", func: file_truncate_shrink_read_delete },
         StressTest { name: "file_truncate_grow_read_delete", func: file_truncate_grow_read_delete },
         StressTest { name: "file_rename_check_delete", func: file_rename_check_delete },
+        StressTest { name: "symlink_create_read_delete", func: symlink_create_read_delete },
         // Add more tests here
     ];
     let mut results = vec![vec![]; stress_tests.len()];
-    for (prov_idx, (prov, prov_name, db_path)) in providers.iter().enumerate() {
+    for (_prov_idx, (prov, prov_name, db_path)) in providers.iter().enumerate() {
         clean_setup(*db_path);
         let mut child = run_fuse_with_provider(prov, *db_path);
         wait_for_mount();
@@ -233,8 +255,8 @@ fn integration_stress() {
     table.add_row(Row::new(header.iter().map(|s| Cell::new(s)).collect()));
     for (test_idx, test) in stress_tests.iter().enumerate() {
         let mut cells = vec![test.name.to_string()];
-        for prov_idx in 0..providers.len() {
-            let r = &results[test_idx][prov_idx];
+        for (_prov_idx, (_, _prov_name, _)) in providers.iter().enumerate() {
+            let r = &results[test_idx][_prov_idx];
             if r.success {
                 cells.push(r.elapsed.as_micros().to_string());
             } else {
@@ -249,12 +271,12 @@ fn integration_stress() {
     let mut failure_table = Table::new();
     failure_table.add_row(Row::new(vec![Cell::new("test"), Cell::new("provider"), Cell::new("reason")]));
     for (test_idx, test) in stress_tests.iter().enumerate() {
-        for (prov_idx, (_, prov_name, _)) in providers.iter().enumerate() {
-            let r = &results[test_idx][prov_idx];
+        for (_prov_idx, (_, _prov_name, _)) in providers.iter().enumerate() {
+            let r = &results[test_idx][_prov_idx];
             if !r.success {
                 failure_table.add_row(Row::new(vec![
                     Cell::new(test.name),
-                    Cell::new(prov_name),
+                    Cell::new(_prov_name),
                     Cell::new(r.error.as_deref().unwrap_or("unknown error")),
                 ]));
             }

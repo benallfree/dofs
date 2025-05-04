@@ -21,9 +21,16 @@ pub struct InMemoryDir {
 }
 
 #[derive(Debug, Clone)]
+pub struct InMemorySymlink {
+    pub target: String,
+    pub attr: fuser::FileAttr,
+}
+
+#[derive(Debug, Clone)]
 pub enum Node {
     File(InMemoryFile),
     Dir(InMemoryDir),
+    Symlink(InMemorySymlink),
 }
 
 pub struct MemoryProvider {
@@ -165,6 +172,17 @@ impl Provider for MemoryProvider {
                     if let Some(fg) = flags { d.attr.flags = fg; }
                     reply.attr(&std::time::Duration::from_secs(1), &d.attr);
                 }
+                Node::Symlink(s) => {
+                    if let Some(m) = mode { s.attr.perm = m as u16; }
+                    if let Some(u) = uid { s.attr.uid = u; }
+                    if let Some(g) = gid { s.attr.gid = g; }
+                    if let Some(a) = atime { s.attr.atime = timeornow_to_systemtime(a); }
+                    if let Some(m) = mtime { s.attr.mtime = timeornow_to_systemtime(m); }
+                    if let Some(c) = ctime { s.attr.ctime = c; }
+                    if let Some(cr) = crtime { s.attr.crtime = cr; }
+                    if let Some(fg) = flags { s.attr.flags = fg; }
+                    reply.attr(&std::time::Duration::from_secs(1), &s.attr);
+                }
             }
         } else {
             reply.error(libc::ENOENT);
@@ -179,6 +197,7 @@ impl Provider for MemoryProvider {
                     let attr = match node {
                         Node::File(f) => f.attr,
                         Node::Dir(d) => d.attr,
+                        Node::Symlink(s) => s.attr,
                     };
                     reply.entry(&std::time::Duration::from_secs(1), &attr, 0);
                     return;
@@ -192,6 +211,7 @@ impl Provider for MemoryProvider {
             let attr = match node {
                 Node::File(f) => f.attr,
                 Node::Dir(d) => d.attr,
+                Node::Symlink(s) => s.attr,
             };
             reply.attr(&std::time::Duration::from_secs(1), &attr);
         } else {
@@ -209,6 +229,7 @@ impl Provider for MemoryProvider {
                 let kind = match node {
                     Node::File(_) => fuser::FileType::RegularFile,
                     Node::Dir(_) => fuser::FileType::Directory,
+                    Node::Symlink(_) => fuser::FileType::Symlink,
                 };
                 entries.push((child_ino, kind, name.clone()));
             }
@@ -350,14 +371,20 @@ impl Provider for MemoryProvider {
                 return;
             }
         };
-        if let Some(Node::File(_)) = self.inodes.get(&ino) {
-            if let Some(Node::Dir(parent_dir)) = self.inodes.get_mut(&parent) {
-                parent_dir.children.remove(name_str);
+        match self.inodes.get(&ino) {
+            Some(Node::File(_)) | Some(Node::Symlink(_)) => {
+                if let Some(Node::Dir(parent_dir)) = self.inodes.get_mut(&parent) {
+                    parent_dir.children.remove(name_str);
+                }
+                self.inodes.remove(&ino);
+                reply.ok();
             }
-            self.inodes.remove(&ino);
-            reply.ok();
-        } else {
-            reply.error(libc::EISDIR);
+            Some(Node::Dir(_)) => {
+                reply.error(libc::EISDIR);
+            }
+            None => {
+                reply.error(libc::ENOENT);
+            }
         }
     }
     fn rename(&mut self, parent: u64, name: &OsStr, newparent: u64, newname: &OsStr, _flags: u32, reply: fuser::ReplyEmpty) {
@@ -401,5 +428,55 @@ impl Provider for MemoryProvider {
             dst_parent.children.insert(newname_str.to_string(), ino);
         }
         reply.ok();
+    }
+    fn symlink(&mut self, parent: u64, name: &OsStr, link: &std::path::Path, reply: fuser::ReplyEntry) {
+        let name_str = name.to_str().unwrap_or("");
+        if self.osx_mode && name_str.starts_with("._") {
+            reply.error(libc::EACCES);
+            return;
+        }
+        let already_exists = if let Some(Node::Dir(dir)) = self.inodes.get(&parent) {
+            dir.children.contains_key(name_str)
+        } else {
+            reply.error(libc::ENOENT);
+            return;
+        };
+        if already_exists {
+            reply.error(libc::EEXIST);
+            return;
+        }
+        let ino = self.alloc_inode();
+        let now = SystemTime::now();
+        let target = link.to_string_lossy().to_string();
+        let attr = fuser::FileAttr {
+            ino,
+            size: target.len() as u64,
+            blocks: 0,
+            atime: now,
+            mtime: now,
+            ctime: now,
+            crtime: now,
+            kind: fuser::FileType::Symlink,
+            perm: 0o777,
+            nlink: 1,
+            uid: unsafe { libc::geteuid() },
+            gid: unsafe { libc::getegid() },
+            rdev: 0,
+            flags: 0,
+            blksize: 512,
+        };
+        let symlink = Node::Symlink(InMemorySymlink { target, attr });
+        if let Some(Node::Dir(dir)) = self.inodes.get_mut(&parent) {
+            dir.children.insert(name_str.to_string(), ino);
+        }
+        self.inodes.insert(ino, symlink);
+        reply.entry(&std::time::Duration::from_secs(1), &attr, 0);
+    }
+    fn readlink(&mut self, ino: u64, reply: fuser::ReplyData) {
+        if let Some(Node::Symlink(s)) = self.inodes.get(&ino) {
+            reply.data(s.target.as_bytes());
+        } else {
+            reply.error(libc::EINVAL);
+        }
     }
 } 
