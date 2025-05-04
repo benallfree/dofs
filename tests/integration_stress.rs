@@ -129,6 +129,29 @@ fn file_truncate_shrink_read_delete() -> Result<(), String> {
     Ok(())
 }
 
+fn file_truncate_grow_read_delete() -> Result<(), String> {
+    use std::fs::OpenOptions;
+    // Create file and write small data
+    let mut file = File::create(TEST_FILE).map_err(|e| format!("create: {e}"))?;
+    let data = vec![9u8; 512 * 1024];
+    file.write_all(&data).map_err(|e| format!("write: {e}"))?;
+    drop(file);
+    // Grow file to 1MB
+    let file = OpenOptions::new().write(true).open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
+    file.set_len(1024 * 1024).map_err(|e| format!("truncate: {e}"))?;
+    drop(file);
+    // Read back and check
+    let mut file = File::open(TEST_FILE).map_err(|e| format!("open: {e}"))?;
+    let mut buf = Vec::new();
+    file.read_to_end(&mut buf).map_err(|e| format!("read: {e}"))?;
+    if buf.len() != 1024 * 1024 || &buf[..512*1024] != &data[..] || !buf[512*1024..].iter().all(|&b| b == 0) {
+        return Err("data mismatch after grow".to_string());
+    }
+    // Remove file
+    fs::remove_file(TEST_FILE).map_err(|e| format!("remove: {e}"))?;
+    Ok(())
+}
+
 #[test]
 fn integration_stress() {
     let providers = [
@@ -141,6 +164,7 @@ fn integration_stress() {
         StressTest { name: "dir_create_list_delete", func: dir_create_list_delete },
         StressTest { name: "file_append_read_delete", func: file_append_read_delete },
         StressTest { name: "file_truncate_shrink_read_delete", func: file_truncate_shrink_read_delete },
+        StressTest { name: "file_truncate_grow_read_delete", func: file_truncate_grow_read_delete },
         // Add more tests here
     ];
     let mut results = vec![];
