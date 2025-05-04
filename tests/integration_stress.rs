@@ -9,8 +9,8 @@ const MOUNTPOINT: &str = "./mnt";
 const TEST_FILE: &str = "./mnt/testfile";
 const TEST_DIR: &str = "./mnt/testdir";
 
+#[derive(Clone)]
 struct ProviderTestResult {
-    provider: &'static str,
     elapsed: Duration,
     success: bool,
     error: Option<String>,
@@ -32,8 +32,12 @@ fn run_fuse_with_provider(provider: &str) -> std::process::Child {
 
 fn wait_for_mount() {
     for _ in 0..40 {
-        if std::fs::metadata(format!("{}/.fuse_ready", MOUNTPOINT)).is_ok() {
-            return;
+        if let Ok(mut file) = File::open(format!("{}/.fuse_ready", MOUNTPOINT)) {
+            let mut contents = String::new();
+            if file.read_to_string(&mut contents).is_ok() {
+                println!("Found .fuse_ready with contents: {}", contents);
+                return;
+            }
         }
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -189,33 +193,30 @@ fn integration_stress() {
         StressTest { name: "file_rename_check_delete", func: file_rename_check_delete },
         // Add more tests here
     ];
-    let mut results = vec![];
-    for test in &stress_tests {
-        let mut row = vec![];
-        for (prov, prov_name) in providers.iter() {
-            clean_setup();
-            let mut child = run_fuse_with_provider(prov);
-            wait_for_mount();
+    let mut results = vec![vec![]; stress_tests.len()];
+    for (prov_idx, (prov, prov_name)) in providers.iter().enumerate() {
+        clean_setup();
+        let mut child = run_fuse_with_provider(prov);
+        wait_for_mount();
+        for (test_idx, test) in stress_tests.iter().enumerate() {
+            println!("running test: {} with provider: {}", test.name, prov_name);
             let start = Instant::now();
             let (success, error) = match (test.func)() {
                 Ok(_) => (true, None),
                 Err(e) => (false, Some(e)),
             };
             let elapsed = start.elapsed();
-            // Send SIGINT for clean unmount
-            unsafe {
-                libc::kill(child.id() as i32, libc::SIGINT);
-            }
-            let _ = child.wait();
-            wait_for_unmount();
-            row.push(ProviderTestResult {
-                provider: prov_name,
+            results[test_idx].push(ProviderTestResult {
                 elapsed,
                 success,
                 error,
             });
         }
-        results.push((test.name, row));
+        unsafe {
+            libc::kill(child.id() as i32, libc::SIGINT);
+        }
+        let _ = child.wait();
+        wait_for_unmount();
     }
     // Print summary table
     let mut table = Table::new();
@@ -224,13 +225,13 @@ fn integration_stress() {
         header.push(prov_name.to_string());
     }
     table.add_row(Row::new(header.iter().map(|s| Cell::new(s)).collect()));
-    for (test_name, row) in &results {
-        let mut cells = vec![test_name.to_string()];
-        for r in row {
+    for (test_idx, test) in stress_tests.iter().enumerate() {
+        let mut cells = vec![test.name.to_string()];
+        for prov_idx in 0..providers.len() {
+            let r = &results[test_idx][prov_idx];
             if r.success {
                 cells.push(r.elapsed.as_micros().to_string());
             } else {
-                // Unicode red X
                 cells.push("\u{274C}".to_string());
             }
         }
@@ -241,12 +242,13 @@ fn integration_stress() {
     // Print failure details table
     let mut failure_table = Table::new();
     failure_table.add_row(Row::new(vec![Cell::new("test"), Cell::new("provider"), Cell::new("reason")]));
-    for (test_name, row) in &results {
-        for r in row {
+    for (test_idx, test) in stress_tests.iter().enumerate() {
+        for (prov_idx, (_, prov_name)) in providers.iter().enumerate() {
+            let r = &results[test_idx][prov_idx];
             if !r.success {
                 failure_table.add_row(Row::new(vec![
-                    Cell::new(test_name),
-                    Cell::new(r.provider),
+                    Cell::new(test.name),
+                    Cell::new(prov_name),
                     Cell::new(r.error.as_deref().unwrap_or("unknown error")),
                 ]));
             }
@@ -256,5 +258,5 @@ fn integration_stress() {
         println!("\nFailure details:");
         failure_table.printstd();
     }
-    assert!(results.iter().all(|(_, row)| row.iter().all(|r| r.success)), "Some providers failed");
+    assert!(results.iter().all(|row| row.iter().all(|r| r.success)), "Some providers failed");
 } 
