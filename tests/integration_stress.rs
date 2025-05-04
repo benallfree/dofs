@@ -250,15 +250,32 @@ fn integration_stress() {
     let mut table = Table::new();
     let mut header = vec!["operation".to_string()];
     for (_, prov_name, _) in providers.iter() {
-        header.push(prov_name.to_string());
+        header.push(format!("{} (μs)", prov_name));
     }
     table.add_row(Row::new(header.iter().map(|s| Cell::new(s)).collect()));
     for (test_idx, test) in stress_tests.iter().enumerate() {
         let mut cells = vec![test.name.to_string()];
+        // Collect all elapsed times for this test row (only successful ones)
+        let times: Vec<Option<u128>> = results[test_idx]
+            .iter()
+            .map(|r| if r.success { Some(r.elapsed.as_micros()) } else { None })
+            .collect();
+        // Find the minimum time (ignore failures)
+        let min_time = times.iter().filter_map(|&t| t).min().unwrap_or(0);
         for (_prov_idx, (_, _prov_name, _)) in providers.iter().enumerate() {
             let r = &results[test_idx][_prov_idx];
             if r.success {
-                cells.push(r.elapsed.as_micros().to_string());
+                let t = r.elapsed.as_micros();
+                if t == min_time {
+                    cells.push(format!("{}", t));
+                } else {
+                    let percent = if min_time > 0 {
+                        ((t as f64 - min_time as f64) / min_time as f64 * 100.0).round() as i64
+                    } else {
+                        0
+                    };
+                    cells.push(format!("{} (+{}%)", t, percent));
+                }
             } else {
                 cells.push("\u{274C}".to_string());
             }
