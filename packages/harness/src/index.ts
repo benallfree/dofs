@@ -123,4 +123,8 @@ app.get('/api/file', async (c) => {
   }
 })
 
+app.all('*', async (c) => {
+  return c.env.ASSETS.fetch(c.req.raw)
+})
+
 export default app
