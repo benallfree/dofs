@@ -31,6 +31,8 @@
       term.open(document.getElementById('terminal'))
       term.write('Connected to Durable Object File System! Type "help" for commands.\r\n$ ')
       let buffer = ''
+      let history = []
+      let historyIndex = -1
       const allowedCommands = {
         help: () => 'Allowed commands: help, echo, date, ls, open',
         echo: (args) => args.join(' '),
@@ -128,6 +130,10 @@
           // Enter
           const [cmd, ...args] = buffer.trim().split(' ')
           term.writeln('')
+          if (buffer.trim().length > 0) {
+            history.push(buffer)
+            historyIndex = history.length
+          }
           if (allowedCommands[cmd]) {
             const result = allowedCommands[cmd](args)
             if (result instanceof Promise) {
@@ -145,6 +151,27 @@
           if (buffer.length > 0) {
             buffer = buffer.slice(0, -1)
             term.write('\b \b')
+          }
+        } else if (e === '\u001b[A') {
+          // Up arrow
+          if (history.length > 0 && historyIndex > 0) {
+            historyIndex--
+            // Clear current line
+            term.write(`\r\x1b[K$ `)
+            buffer = history[historyIndex]
+            term.write(buffer)
+          }
+        } else if (e === '\u001b[B') {
+          // Down arrow
+          if (history.length > 0 && historyIndex < history.length - 1) {
+            historyIndex++
+            term.write(`\r\x1b[K$ `)
+            buffer = history[historyIndex]
+            term.write(buffer)
+          } else if (historyIndex === history.length - 1) {
+            historyIndex++
+            term.write(`\r\x1b[K$ `)
+            buffer = ''
           }
         } else if (e >= ' ' && e <= '~') {
           // Printable
