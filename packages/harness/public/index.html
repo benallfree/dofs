@@ -32,7 +32,7 @@
       term.write('Connected to Durable Object File System! Type "help" for commands.\r\n$ ')
       let buffer = ''
       const allowedCommands = {
-        help: () => 'Allowed commands: help, echo, date, ls',
+        help: () => 'Allowed commands: help, echo, date, ls, open',
         echo: (args) => args.join(' '),
         date: () => new Date().toString(),
         ls: async (args) => {
@@ -114,6 +114,13 @@
           } catch (e) {
             return 'Error: ' + e.message
           }
+        },
+        open: (args) => {
+          const path = args[0]
+          if (!path) return 'Usage: open <file>'
+          const url = `/api/file?path=${encodeURIComponent(path)}`
+          window.open(url, '_blank')
+          return `Opened ${path} in new window.`
         },
       }
       term.onData(async (e) => {
