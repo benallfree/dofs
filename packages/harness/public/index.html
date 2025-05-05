@@ -34,12 +34,50 @@
       let history = []
       let historyIndex = -1
       let autocompleteState = null // {candidates, prefix, insertPos, cycleIndex, lastBuffer}
+      let cwd = '/'
+      function resolvePath(inputPath) {
+        if (!inputPath || inputPath === '.') return cwd
+        if (inputPath.startsWith('/')) return inputPath.replace(/\/+/g, '/')
+        let parts = (cwd + '/' + inputPath).split('/').filter(Boolean)
+        let stack = []
+        for (let part of parts) {
+          if (part === '.') continue
+          if (part === '..') stack.pop()
+          else stack.push(part)
+        }
+        return '/' + stack.join('/')
+      }
+      function updatePrompt() {
+        term.write(`${cwd} $ `)
+      }
       const allowedCommands = {
-        help: () => 'Allowed commands: help, echo, date, ls, open, upload, rm',
+        help: () =>
+          'Allowed commands: help, echo, date, ls, open, upload, rm, cd, pwd, cat, mkdir, rmdir, mv, ln -s, stat',
         echo: (args) => args.join(' '),
         date: () => new Date().toString(),
+        pwd: () => cwd,
+        cd: async (args) => {
+          const path = resolvePath(args[0])
+          if (!args[0]) {
+            cwd = '/'
+            writePrompt()
+            buffer = ''
+            return
+          }
+          const res = await fetch(`/api/stat?path=${encodeURIComponent(path)}`)
+          if (!res.ok) return `cd: ${args[0]}: No such file or directory`
+          const stat = await res.json()
+          if (!stat || typeof stat !== 'object') {
+            return `cd: ${args[0]}: stat error`
+          }
+          if (!stat.isDirectory) return `cd: ${args[0]}: Not a directory`
+          cwd = path
+          writePrompt()
+          buffer = ''
+          return
+        },
         ls: async (args) => {
-          const path = args[0] || '/'
+          const path = resolvePath(args[0] || '.')
           try {
             const res = await fetch(`/api/ls?path=${encodeURIComponent(path)}`)
             if (!res.ok) return 'Error: could not list directory'
@@ -75,7 +113,6 @@
               const time = d.toTimeString().slice(0, 5)
               return `${mon} ${day} ${time}`
             }
-            // Calculate max width for each column
             let maxMode = 10,
               maxNlink = 1,
               maxUid = 1,
@@ -118,9 +155,17 @@
             return 'Error: ' + e.message
           }
         },
+        cat: async (args) => {
+          const path = resolvePath(args[0])
+          if (!args[0]) return 'Usage: cat <file>'
+          const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`)
+          if (!res.ok) return `cat: ${args[0]}: No such file`
+          const text = await res.text()
+          return text
+        },
         open: (args) => {
-          const path = args[0]
-          if (!path) return 'Usage: open <file>'
+          const path = resolvePath(args[0])
+          if (!args[0]) return 'Usage: open <file>'
           const url = `/api/file?path=${encodeURIComponent(path)}`
           window.open(url, '_blank')
           return `Opened ${path} in new window.`
@@ -160,11 +205,54 @@
           })
         },
         rm: async (args) => {
-          const path = args[0]
-          if (!path) return 'Usage: rm <file>'
+          const path = resolvePath(args[0])
+          if (!args[0]) return 'Usage: rm <file>'
           const res = await fetch(`/api/rm?path=${encodeURIComponent(path)}`, { method: 'POST' })
-          if (!res.ok) return `Error: could not remove ${path}`
-          return `Removed ${path}`
+          if (!res.ok) return `Error: could not remove ${args[0]}`
+          return `Removed ${args[0]}`
+        },
+        mkdir: async (args) => {
+          const path = resolvePath(args[0])
+          if (!args[0]) return 'Usage: mkdir <dir>'
+          const res = await fetch(`/api/mkdir?path=${encodeURIComponent(path)}`, { method: 'POST' })
+          if (!res.ok) return `Error: could not create directory ${args[0]}`
+          return `Created directory ${args[0]}`
+        },
+        rmdir: async (args) => {
+          const path = resolvePath(args[0])
+          if (!args[0]) return 'Usage: rmdir <dir>'
+          const res = await fetch(`/api/rmdir?path=${encodeURIComponent(path)}`, { method: 'POST' })
+          if (!res.ok) return `Error: could not remove directory ${args[0]}`
+          return `Removed directory ${args[0]}`
+        },
+        mv: async (args) => {
+          if (args.length < 2) return 'Usage: mv <src> <dest>'
+          const src = resolvePath(args[0])
+          const dest = resolvePath(args[1])
+          const res = await fetch(`/api/mv?src=${encodeURIComponent(src)}&dest=${encodeURIComponent(dest)}`, {
+            method: 'POST',
+          })
+          if (!res.ok) return `Error: could not move ${args[0]}`
+          return `Moved ${args[0]} to ${args[1]}`
+        },
+        'ln -s': async (args) => {
+          if (args.length < 2) return 'Usage: ln -s <target> <link>'
+          const target = resolvePath(args[0])
+          const path = resolvePath(args[1])
+          const res = await fetch(
+            `/api/symlink?target=${encodeURIComponent(target)}&path=${encodeURIComponent(path)}`,
+            { method: 'POST' }
+          )
+          if (!res.ok) return `Error: could not symlink ${args[1]}`
+          return `Symlinked ${args[1]} -> ${args[0]}`
+        },
+        stat: async (args) => {
+          const path = resolvePath(args[0])
+          if (!args[0]) return 'Usage: stat <file|dir>'
+          const res = await fetch(`/api/stat?path=${encodeURIComponent(path)}`)
+          if (!res.ok) return `Error: could not stat ${args[0]}`
+          const stat = await res.json()
+          return JSON.stringify(stat, null, 2)
         },
       }
       const allCommands = Object.keys(allowedCommands)
@@ -196,6 +284,9 @@
           return []
         }
       }
+      function writePrompt() {
+        term.write(`${cwd} $ `)
+      }
       term.onData(async (e) => {
         if (e === '\r') {
           // Enter
@@ -208,15 +299,21 @@
           if (allowedCommands[cmd]) {
             const result = allowedCommands[cmd](args)
             if (result instanceof Promise) {
-              term.writeln(await result)
+              const awaited = await result
+              if (awaited !== undefined && awaited !== null) term.writeln(awaited)
             } else {
-              term.writeln(result)
+              if (result !== undefined && result !== null) term.writeln(result)
+            }
+            if (cmd === 'cd') {
+              writePrompt()
+              buffer = ''
+              return
             }
           } else if (cmd.length > 0) {
             term.writeln('Command not found')
           }
           buffer = ''
-          term.write('$ ')
+          writePrompt()
         } else if (e === '\u007F') {
           // Backspace
           if (buffer.length > 0) {
