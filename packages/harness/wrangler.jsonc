@@ -5,7 +5,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dofs",
-  "main": "src/harness.ts",
+  "main": "src/index.ts",
   "compatibility_date": "2025-05-04",
   "migrations": [
     {
