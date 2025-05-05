@@ -308,6 +308,10 @@
             }
             return
           }
+        } else if (e === '\u0003') {
+          // Ctrl+C
+          term.write('^C\r\n$ ')
+          buffer = ''
         } else if (e >= ' ' && e <= '~') {
           // Printable
           buffer += e
