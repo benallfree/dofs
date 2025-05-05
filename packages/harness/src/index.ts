@@ -61,10 +61,13 @@ export class MyDurableObject extends DurableObjectFs<Env> {
 
 const app = new Hono<{ Bindings: Env }>()
 
+function getDofsStub(env: Env) {
+  const id = env.MY_DURABLE_OBJECT.idFromName('dofs')
+  return env.MY_DURABLE_OBJECT.get(id)
+}
+
 app.post('/api/upload', async (c) => {
-  const env = c.env
-  let id = env.MY_DURABLE_OBJECT.idFromName(`dofs`)
-  let stub = env.MY_DURABLE_OBJECT.get(id)
+  const stub = getDofsStub(c.env)
   const formData = await c.req.formData()
   const file = formData.get('file')
   if (!file || typeof file === 'string') {
@@ -77,10 +80,8 @@ app.post('/api/upload', async (c) => {
 })
 
 app.get('/api/ls', async (c) => {
-  const env = c.env
+  const stub = getDofsStub(c.env)
   const path = c.req.query('path') || '/'
-  let id = env.MY_DURABLE_OBJECT.idFromName('dofs')
-  let stub = env.MY_DURABLE_OBJECT.get(id)
   const entries = await stub.listDir(path)
   const stats = await Promise.all(
     entries
@@ -98,11 +99,9 @@ app.get('/api/ls', async (c) => {
 })
 
 app.get('/api/file', async (c) => {
-  const env = c.env
+  const stub = getDofsStub(c.env)
   const path = c.req.query('path')
   if (!path) return c.text('Missing path', 400)
-  let id = env.MY_DURABLE_OBJECT.idFromName('dofs')
-  let stub = env.MY_DURABLE_OBJECT.get(id)
   try {
     const data = await stub.readFile(path)
     // Try to guess content type from extension
@@ -124,16 +123,76 @@ app.get('/api/file', async (c) => {
 })
 
 app.post('/api/rm', async (c) => {
-  const env = c.env
+  const stub = getDofsStub(c.env)
   const path = c.req.query('path')
   if (!path) return c.text('Missing path', 400)
-  let id = env.MY_DURABLE_OBJECT.idFromName('dofs')
-  let stub = env.MY_DURABLE_OBJECT.get(id)
   try {
     await stub.unlink(path)
     return c.text('OK')
   } catch (e) {
     return c.text('Not found', 404)
+  }
+})
+
+app.post('/api/mkdir', async (c) => {
+  const stub = getDofsStub(c.env)
+  const path = c.req.query('path')
+  if (!path) return c.text('Missing path', 400)
+  try {
+    await stub.mkdir(path)
+    return c.text('OK')
+  } catch (e) {
+    return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
+  }
+})
+
+app.post('/api/rmdir', async (c) => {
+  const stub = getDofsStub(c.env)
+  const path = c.req.query('path')
+  if (!path) return c.text('Missing path', 400)
+  try {
+    await stub.rmdir(path)
+    return c.text('OK')
+  } catch (e) {
+    return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
+  }
+})
+
+app.post('/api/mv', async (c) => {
+  const stub = getDofsStub(c.env)
+  const src = c.req.query('src')
+  const dest = c.req.query('dest')
+  if (!src || !dest) return c.text('Missing src or dest', 400)
+  try {
+    await stub.rename(src, dest)
+    return c.text('OK')
+  } catch (e) {
+    return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
+  }
+})
+
+app.post('/api/symlink', async (c) => {
+  const stub = getDofsStub(c.env)
+  const target = c.req.query('target')
+  const path = c.req.query('path')
+  if (!target || !path) return c.text('Missing target or path', 400)
+  try {
+    await stub.symlink(target, path)
+    return c.text('OK')
+  } catch (e) {
+    return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
+  }
+})
+
+app.get('/api/stat', async (c) => {
+  const stub = getDofsStub(c.env)
+  const path = c.req.query('path')
+  if (!path) return c.text('Missing path', 400)
+  try {
+    const stat = await stub.stat(path)
+    return c.json(stat)
+  } catch (e) {
+    return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
   }
 })
 
