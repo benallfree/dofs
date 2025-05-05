@@ -60,8 +60,6 @@
           const path = resolvePath(args[0])
           if (!args[0]) {
             cwd = '/'
-            writePrompt()
-            buffer = ''
             return
           }
           const res = await fetch(`/api/stat?path=${encodeURIComponent(path)}`)
@@ -72,8 +70,6 @@
           }
           if (!stat.isDirectory) return `cd: ${args[0]}: Not a directory`
           cwd = path
-          writePrompt()
-          buffer = ''
           return
         },
         ls: async (args) => {
@@ -335,7 +331,6 @@
             historyIndex++
             term.write(`\r\x1b[K$ `)
             buffer = history[historyIndex]
-            term.write(buffer)
           } else if (historyIndex === history.length - 1) {
             historyIndex++
             term.write(`\r\x1b[K$ `)
