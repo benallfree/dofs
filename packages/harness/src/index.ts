@@ -66,7 +66,33 @@ app.get('/', async (c) => {
   let id = env.MY_DURABLE_OBJECT.idFromName(`dofs`)
   let stub = env.MY_DURABLE_OBJECT.get(id)
   const entries = await stub.listDir('/')
-  const html = `<!DOCTYPE html><html><head><title>Root Directory</title></head><body><h1>Root Directory</h1><form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:1em; padding:1em; text-align:center;"><input id="file-input" type="file" name="file" required><button type="submit">Upload</button></form><ul>${entries.map((e: string) => `<li>${e}</li>`).join('')}</ul></body></html>`
+  // Get stats for each entry
+  const stats = await Promise.all(
+    entries.map(async (e) => {
+      try {
+        const s = await stub.stat('/' + e)
+        return { name: e, ...s }
+      } catch (err) {
+        return { name: e, error: true }
+      }
+    })
+  )
+  function isStat(f: any): f is Stat & { name: string } {
+    return !f.error
+  }
+  function pad(str: string, len: number, right = false) {
+    str = String(str)
+    if (str.length >= len) return str.slice(0, len)
+    return right ? str.padEnd(len, ' ') : str.padStart(len, ' ')
+  }
+  const header = `${pad('MODE', 6, true)} ${pad('UID', 4)} ${pad('GID', 4)} ${pad('SIZE', 8)} ${pad('MTIME', 20, true)} NAME`
+  const lines = stats.map((f) => {
+    if (!isStat(f)) return pad('', 6, true) + ' '.repeat(4 + 4 + 8 + 20 + 1) + f.name + ' (error)'
+    const mode = f.mode ? f.mode.toString(8) : ''
+    const mtime = f.mtime ? new Date(f.mtime).toLocaleString() : ''
+    return `${pad(String(mode), 6, true)} ${pad(String(f.uid ?? ''), 4)} ${pad(String(f.gid ?? ''), 4)} ${pad(String(f.size ?? ''), 8)} ${pad(String(mtime), 20, true)} ${f.name}${f.isDirectory ? '/' : ''}`
+  })
+  const html = `<!DOCTYPE html><html><head><title>Root Directory</title></head><body><h1>Root Directory</h1><form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:1em; padding:1em; text-align:center;"><input id="file-input" type="file" name="file" required><button type="submit">Upload</button></form><pre style="font-family:monospace; background:#222; color:#eee; padding:1em; border-radius:6px;">${header}\n${lines.join('\n')}</pre></body></html>`
   return new Response(html, { headers: { 'content-type': 'text/html' } })
 })
 
