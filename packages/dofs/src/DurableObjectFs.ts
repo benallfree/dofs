@@ -33,6 +33,7 @@ interface FilesystemAPI {
   readlink(path: string): string
   rename(oldPath: string, newPath: string): void
   unlink(path: string): void
+  create(path: string): void
 }
 
 type DurableObjectFsStorage = DurableObject['ctx']['storage'] & {
@@ -79,16 +80,16 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         return result.buffer
       },
       writeFile: (path: string, data: ArrayBuffer | string, options?: WriteFileOptions) => {
-        const ino = this.resolvePathToInode(path)
-        this.ctx.storage.sql.exec('DELETE FROM chunks WHERE ino = ?', ino)
-        const buf = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data)
-        this.ctx.storage.sql.exec(
-          'INSERT INTO chunks (ino, offset, data, length) VALUES (?, ?, ?, ?)',
-          ino,
-          0,
-          buf,
-          buf.length
-        )
+        // Try to unlink if exists
+        try {
+          this.ctx.storage.fs.unlink(path)
+        } catch (e: any) {
+          if (!(e instanceof Error && e.message === 'ENOENT')) throw e
+        }
+        // Create the file
+        this.ctx.storage.fs.create(path)
+        // Write the data
+        this.ctx.storage.fs.write(path, data, { offset: 0, encoding: options?.encoding })
       },
       read: (path: string, options: ReadOptions) => {
         const ino = this.resolvePathToInode(path)
@@ -307,6 +308,43 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const ino = this.resolvePathToInode(path)
         this.ctx.storage.sql.exec('DELETE FROM files WHERE ino = ?', ino)
         this.ctx.storage.sql.exec('DELETE FROM chunks WHERE ino = ?', ino)
+      },
+      create: (path: string) => {
+        const parts = path.split('/').filter(Boolean)
+        if (parts.length === 0) throw new Error('EEXIST')
+        const name = parts[parts.length - 1]
+        const parentPath = '/' + parts.slice(0, -1).join('/')
+        const parent = this.resolvePathToInode(parentPath)
+        // Check if already exists
+        const cursor = this.ctx.storage.sql.exec('SELECT ino FROM files WHERE parent = ? AND name = ?', parent, name)
+        if (cursor.next().value) throw new Error('EEXIST')
+        const ino = this.allocInode()
+        const now = Date.now()
+        const attr = {
+          ino,
+          size: 0,
+          blocks: 0,
+          atime: now,
+          mtime: now,
+          ctime: now,
+          crtime: now,
+          kind: 'File',
+          perm: 0o644,
+          nlink: 1,
+          uid: 0,
+          gid: 0,
+          rdev: 0,
+          flags: 0,
+          blksize: 512,
+        }
+        this.ctx.storage.sql.exec(
+          'INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, NULL)',
+          ino,
+          name,
+          parent,
+          0,
+          JSON.stringify(attr)
+        )
       },
     }
   }
