@@ -61,7 +61,7 @@ export class MyDurableObject extends DurableObjectFs<Env> {
 
 const app = new Hono<{ Bindings: Env }>()
 
-app.post('/upload', async (c) => {
+app.post('/api/upload', async (c) => {
   const env = c.env
   let id = env.MY_DURABLE_OBJECT.idFromName(`dofs`)
   let stub = env.MY_DURABLE_OBJECT.get(id)

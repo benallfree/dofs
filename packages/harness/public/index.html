@@ -34,7 +34,7 @@
       let history = []
       let historyIndex = -1
       const allowedCommands = {
-        help: () => 'Allowed commands: help, echo, date, ls, open',
+        help: () => 'Allowed commands: help, echo, date, ls, open, upload',
         echo: (args) => args.join(' '),
         date: () => new Date().toString(),
         ls: async (args) => {
@@ -123,6 +123,40 @@
           const url = `/api/file?path=${encodeURIComponent(path)}`
           window.open(url, '_blank')
           return `Opened ${path} in new window.`
+        },
+        upload: () => {
+          return new Promise((resolve) => {
+            const input = document.createElement('input')
+            input.type = 'file'
+            input.style.display = 'none'
+            document.body.appendChild(input)
+            input.addEventListener('change', () => {
+              const file = input.files[0]
+              if (!file) {
+                document.body.removeChild(input)
+                resolve('No file selected.')
+                return
+              }
+              const formData = new FormData()
+              formData.append('file', file)
+              const xhr = new XMLHttpRequest()
+              xhr.open('POST', '/api/upload')
+              xhr.onload = () => {
+                document.body.removeChild(input)
+                if (xhr.status === 200) {
+                  resolve(`Uploaded: ${file.name}`)
+                } else {
+                  resolve(`Upload failed: ${xhr.statusText}`)
+                }
+              }
+              xhr.onerror = () => {
+                document.body.removeChild(input)
+                resolve('Upload failed: network error')
+              }
+              xhr.send(formData)
+            })
+            input.click()
+          })
         },
       }
       term.onData(async (e) => {
