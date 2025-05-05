@@ -78,10 +78,20 @@ app.post('/api/upload', async (c) => {
   }
   const arrayBuffer = await file.arrayBuffer()
   const dir = c.req.query('path') || '/'
-  // Ensure no double slashes and always one slash between dir and file name
-  const path = (dir.endsWith('/') ? dir : dir + '/') + file.name
-  console.log(`uploaded ${file.name} to ${path}`)
-  await stub.writeFile(path, arrayBuffer)
+  const finalPath = (dir.endsWith('/') ? dir : dir + '/') + file.name
+  const tempPath = finalPath + '.uploading'
+  const CHUNK_SIZE = 1024 * 1024 // 1MB
+  const buf = new Uint8Array(arrayBuffer)
+  console.log('writing', { length: buf.length })
+  let offset = 0
+  while (offset < buf.length) {
+    const end = Math.min(offset + CHUNK_SIZE, buf.length)
+    const chunk = buf.slice(offset, end)
+    console.log('writing chunk', { offset, length: chunk.length })
+    await stub.write(tempPath, chunk, { offset })
+    offset = end
+  }
+  await stub.rename(tempPath, finalPath)
   return c.redirect('/')
 })
 
