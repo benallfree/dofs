@@ -257,15 +257,15 @@
         let path = argPrefix
         let base = ''
         if (!path || path.endsWith('/')) {
-          base = path || '/'
+          base = path || cwd
           path = ''
         } else {
           const idx = path.lastIndexOf('/')
           if (idx >= 0) {
-            base = path.slice(0, idx + 1)
+            base = resolvePath(path.slice(0, idx + 1))
             path = path.slice(idx + 1)
           } else {
-            base = ''
+            base = cwd
           }
         }
         try {
@@ -378,7 +378,7 @@
             let argIdx = parts.length - 1
             prefix = parts[argIdx] || ''
             insertPos = buffer.lastIndexOf(prefix)
-            let candidates = await getCompletions(parts[0], prefix)
+            let candidates = await getCompletions(parts[0], prefix, cwd)
             if (!candidates.length) return
             if (!autocompleteState || autocompleteState.lastBuffer !== buffer) {
               autocompleteState = { candidates, prefix, insertPos, cycleIndex: 0, lastBuffer: buffer }
