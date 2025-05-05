@@ -132,7 +132,13 @@ app.get('/api/file', async (c) => {
       svg: 'image/svg+xml',
     }
     const contentType = typeMap[ext as keyof typeof typeMap] || 'application/octet-stream'
-    return new Response(data, { headers: { 'content-type': contentType } })
+    // Add Content-Disposition header to suggest filename and inline display
+    return new Response(data, {
+      headers: {
+        'content-type': contentType,
+        'content-disposition': `inline; filename="${encodeURIComponent(path.split('/').pop() || 'file')}"`,
+      },
+    })
   } catch (e) {
     return c.text('Not found', 404)
   }
