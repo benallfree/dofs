@@ -123,6 +123,20 @@ app.get('/api/file', async (c) => {
   }
 })
 
+app.post('/api/rm', async (c) => {
+  const env = c.env
+  const path = c.req.query('path')
+  if (!path) return c.text('Missing path', 400)
+  let id = env.MY_DURABLE_OBJECT.idFromName('dofs')
+  let stub = env.MY_DURABLE_OBJECT.get(id)
+  try {
+    await stub.unlink(path)
+    return c.text('OK')
+  } catch (e) {
+    return c.text('Not found', 404)
+  }
+})
+
 app.all('*', async (c) => {
   return c.env.ASSETS.fetch(c.req.raw)
 })

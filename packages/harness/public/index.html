@@ -35,7 +35,7 @@
       let historyIndex = -1
       let autocompleteState = null // {candidates, prefix, insertPos, cycleIndex, lastBuffer}
       const allowedCommands = {
-        help: () => 'Allowed commands: help, echo, date, ls, open, upload',
+        help: () => 'Allowed commands: help, echo, date, ls, open, upload, rm',
         echo: (args) => args.join(' '),
         date: () => new Date().toString(),
         ls: async (args) => {
@@ -158,6 +158,13 @@
             })
             input.click()
           })
+        },
+        rm: async (args) => {
+          const path = args[0]
+          if (!path) return 'Usage: rm <file>'
+          const res = await fetch(`/api/rm?path=${encodeURIComponent(path)}`, { method: 'POST' })
+          if (!res.ok) return `Error: could not remove ${path}`
+          return `Removed ${path}`
         },
       }
       const allCommands = Object.keys(allowedCommands)
