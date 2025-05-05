@@ -119,7 +119,6 @@ app.get('/api/file', async (c) => {
   const path = c.req.query('path')
   if (!path) return c.text('Missing path', 400)
   try {
-    const data = await stub.readFile(path)
     // Try to guess content type from extension
     const ext = (path.split('.').pop() || '').toLowerCase()
     const typeMap = {
@@ -132,11 +131,33 @@ app.get('/api/file', async (c) => {
       svg: 'image/svg+xml',
     }
     const contentType = typeMap[ext as keyof typeof typeMap] || 'application/octet-stream'
-    // Add Content-Disposition header to suggest filename and inline display
-    return new Response(data, {
+    const stat = await stub.stat(path)
+    const size = stat.size
+    const STREAM_CHUNK_SIZE = 1024 * 1024 // 1MB
+    let currentOffset = 0
+    const stream = new ReadableStream({
+      async pull(controller) {
+        console.log('pull', { currentOffset })
+        if (currentOffset >= size) {
+          controller.close()
+          return
+        }
+        const readLength = Math.min(STREAM_CHUNK_SIZE, size - currentOffset)
+        console.log('pull', { currentOffset, readLength })
+        const chunk = await stub.read(path, { offset: currentOffset, length: readLength })
+        if (typeof chunk === 'string') {
+          throw new Error('Unexpected string result from stub.read')
+        }
+        controller.enqueue(new Uint8Array(chunk))
+        currentOffset += readLength
+      },
+    })
+    return new Response(stream, {
+      status: 200,
       headers: {
         'content-type': contentType,
         'content-disposition': `inline; filename="${encodeURIComponent(path.split('/').pop() || 'file')}"`,
+        'content-length': String(size),
       },
     })
   } catch (e) {
