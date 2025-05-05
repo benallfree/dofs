@@ -51,10 +51,7 @@
         term.write(`${cwd} $ `)
       }
       const allowedCommands = {
-        help: () =>
-          'Allowed commands: help, echo, date, ls, open, upload, rm, cd, pwd, cat, mkdir, rmdir, mv, ln -s, stat',
-        echo: (args) => args.join(' '),
-        date: () => new Date().toString(),
+        help: () => 'Allowed commands: help, ls, open, upload, rm, cd, pwd, cat, mkdir, rmdir, mv, ln -s, stat, df',
         pwd: () => cwd,
         cd: async (args) => {
           const path = resolvePath(args[0])
@@ -125,28 +122,20 @@
                 maxMtime = Math.max(maxMtime, mtimeStr(f.mtime).length)
               }
             })
-            function padR(str, len) {
-              str = String(str)
-              return str.padEnd(len, ' ')
-            }
-            function padL(str, len) {
-              str = String(str)
-              return str.padStart(len, ' ')
-            }
-            const lines = stats.map((f) => {
-              if (f.error)
-                return `${padR('?', maxMode)} ${padL('?', maxNlink)} ${padR('?', maxUid)} ${padR('?', maxGid)} ${padL('?', maxSize)} ${padR('?', maxMtime)} ${f.name} (error)`
+            const rows = stats.map((f) => {
+              if (f.error) return ['?', '?', '?', '?', '?', '?', f.name + ' (error)']
               return [
-                padR(modeStr(f.mode, f.isDirectory), maxMode),
-                padL(f.nlink ?? 1, maxNlink),
-                padR(f.uid ?? '?', maxUid),
-                padR(f.gid ?? '?', maxGid),
-                padL(humanSize(f.size), maxSize),
-                padR(mtimeStr(f.mtime), maxMtime),
+                modeStr(f.mode, f.isDirectory),
+                f.nlink ?? 1,
+                f.uid ?? '?',
+                f.gid ?? '?',
+                humanSize(f.size),
+                mtimeStr(f.mtime),
                 f.name + (f.isDirectory ? '/' : ''),
-              ].join(' ')
+              ]
             })
-            return lines.join('\r\n')
+            const header = ['Mode', 'Nlink', 'Uid', 'Gid', 'Size', 'Mtime', 'Name']
+            return formatColumns([header, ...rows])
           } catch (e) {
             return 'Error: ' + e.message
           }
@@ -249,6 +238,23 @@
           if (!res.ok) return `Error: could not stat ${args[0]}`
           const stat = await res.json()
           return JSON.stringify(stat, null, 2)
+        },
+        df: async () => {
+          const res = await fetch('/api/df')
+          if (!res.ok) return 'Error: could not get device stats'
+          const stats = await res.json()
+          function humanSize(size) {
+            if (size == null) return '?'
+            if (size < 1024) return size + 'B'
+            if (size < 1024 * 1024) return (size / 1024).toFixed(1).replace(/\.0$/, '') + 'K'
+            if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(1).replace(/\.0$/, '') + 'M'
+            return (size / (1024 * 1024 * 1024)).toFixed(1).replace(/\.0$/, '') + 'G'
+          }
+          const rows = [
+            ['Filesystem', 'Size', 'Used', 'Avail'],
+            ['dofs', humanSize(stats.deviceSize), humanSize(stats.spaceUsed), humanSize(stats.spaceAvailable)],
+          ]
+          return formatColumns(rows)
         },
       }
       const allCommands = Object.keys(allowedCommands)
@@ -418,6 +424,32 @@
         }
         autocompleteState = null
       })
+      // Utility: format columns for terminal output
+      function formatColumns(rows) {
+        if (!rows.length) return ''
+        // Compute max width for each column
+        const colCount = rows[0].length
+        const colWidths = Array(colCount).fill(0)
+        for (const row of rows) {
+          for (let i = 0; i < colCount; ++i) {
+            colWidths[i] = Math.max(colWidths[i], String(row[i]).length)
+          }
+        }
+        // Build lines
+        return rows
+          .map((row) =>
+            row
+              .map((cell, i) => {
+                // Right-align numbers, left-align text
+                if (typeof cell === 'number' || (i > 0 && /^ *[0-9,.]+ *$/.test(cell))) {
+                  return String(cell).padStart(colWidths[i], ' ')
+                }
+                return String(cell).padEnd(colWidths[i], ' ')
+              })
+              .join('  ')
+          )
+          .join('\r\n')
+      }
     </script>
   </body>
 </html>

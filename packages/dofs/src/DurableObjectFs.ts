@@ -43,6 +43,8 @@ interface FilesystemAPI {
   unlink(path: string): void
   create(path: string): void
   truncate(path: string, size: number): void
+  getDeviceStats(): { deviceSize: number; spaceUsed: number; spaceAvailable: number }
+  setDeviceSize(newSize: number): void
 }
 
 type DurableObjectFsStorage = DurableObject['ctx']['storage'] & {
@@ -64,11 +66,11 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
   }
 
   private mountFsApi() {
-    this.ctx.storage.fs = {
+    const fs: FilesystemAPI = {
       readFile: (path: string, options?: ReadFileOptions) => {
         const ino = this.resolvePathToInode(path)
         const cursor = this.ctx.storage.sql.exec(
-          'SELECT offset, data, length FROM chunks WHERE ino = ? ORDER BY offset ASC',
+          'SELECT offset, data, length FROM dofs_chunks WHERE ino = ? ORDER BY offset ASC',
           ino
         )
         let chunks: Uint8Array[] = []
@@ -95,6 +97,13 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         } catch (e: any) {
           if (!(e instanceof Error && e.message === 'ENOENT')) throw e
         }
+        // Check available space before creating
+        const deviceSize = this.getDeviceSize()
+        const spaceUsed = this.getSpaceUsed()
+        const buf = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data)
+        if (spaceUsed + buf.length > deviceSize) {
+          throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+        }
         // Create the file
         this.ctx.storage.fs.create(path)
         // Write the data
@@ -105,7 +114,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const offset = options?.offset ?? 0
         const length = options?.length ?? undefined
         const cursor = this.ctx.storage.sql.exec(
-          'SELECT offset, data, length FROM chunks WHERE ino = ? ORDER BY offset ASC',
+          'SELECT offset, data, length FROM dofs_chunks WHERE ino = ? ORDER BY offset ASC',
           ino
         )
         let chunks: { offset: number; data: Uint8Array }[] = []
@@ -137,6 +146,22 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const ino = this.resolvePathToInode(path)
         const offset = options?.offset ?? 0
         const buf = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data)
+        // Check available space
+        const deviceSize = this.getDeviceSize()
+        const spaceUsed = this.getSpaceUsed()
+        // Estimate new space needed: sum of new data written beyond current file size
+        const fileCursor = this.ctx.storage.sql.exec('SELECT attr FROM dofs_files WHERE ino = ?', ino)
+        const fileRow = fileCursor.next().value
+        let fileSize = 0
+        if (fileRow && fileRow.attr) {
+          const attr = typeof fileRow.attr === 'string' ? JSON.parse(fileRow.attr) : fileRow.attr
+          fileSize = attr.size || 0
+        }
+        const endOffset = offset + buf.length
+        const additional = endOffset > fileSize ? endOffset - fileSize : 0
+        if (spaceUsed + additional > deviceSize) {
+          throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+        }
         const CHUNK_SIZE = 4096
         let written = 0
         let maxEnd = 0
@@ -157,7 +182,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
           }
           // Upsert chunk
           this.ctx.storage.sql.exec(
-            'INSERT INTO chunks (ino, offset, data, length) VALUES (?, ?, ?, ?) ON CONFLICT(ino, offset) DO UPDATE SET data=excluded.data, length=excluded.length',
+            'INSERT INTO dofs_chunks (ino, offset, data, length) VALUES (?, ?, ?, ?) ON CONFLICT(ino, offset) DO UPDATE SET data=excluded.data, length=excluded.length',
             ino,
             chunkOffset,
             chunkData.subarray(0, chunkLength),
@@ -166,16 +191,8 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
           written += writeLen
           maxEnd = Math.max(maxEnd, absOffset + writeLen)
         }
-        // Update file size in attr if needed
-        const attrCursor = this.ctx.storage.sql.exec('SELECT attr FROM files WHERE ino = ?', ino)
-        const attrRow = attrCursor.next().value
-        if (attrRow && attrRow.attr) {
-          const attr = typeof attrRow.attr === 'string' ? JSON.parse(attrRow.attr) : attrRow.attr
-          if (maxEnd > (attr.size ?? 0)) {
-            attr.size = maxEnd
-            this.ctx.storage.sql.exec('UPDATE files SET attr = ? WHERE ino = ?', JSON.stringify(attr), ino)
-          }
-        }
+        // Update file size and space used
+        this.updateFileSizeAndSpaceUsed(ino)
       },
       mkdir: (path: string, options?: MkdirOptions & { mode?: number; umask?: number }) => {
         const parts = path.split('/').filter(Boolean)
@@ -184,7 +201,11 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const parentPath = '/' + parts.slice(0, -1).join('/')
         const parent = this.resolvePathToInode(parentPath)
         // Check if already exists
-        const cursor = this.ctx.storage.sql.exec('SELECT ino FROM files WHERE parent = ? AND name = ?', parent, name)
+        const cursor = this.ctx.storage.sql.exec(
+          'SELECT ino FROM dofs_files WHERE parent = ? AND name = ?',
+          parent,
+          name
+        )
         if (cursor.next().value) throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
         const ino = this.allocInode()
         const now = Date.now()
@@ -209,7 +230,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
           blksize: 512,
         }
         this.ctx.storage.sql.exec(
-          'INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, NULL)',
+          'INSERT INTO dofs_files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, NULL)',
           ino,
           name,
           parent,
@@ -219,15 +240,15 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
       },
       rmdir: (path: string, options?: RmdirOptions) => {
         const ino = this.resolvePathToInode(path)
-        const cursor = this.ctx.storage.sql.exec('SELECT COUNT(*) as count FROM files WHERE parent = ?', ino)
+        const cursor = this.ctx.storage.sql.exec('SELECT COUNT(*) as count FROM dofs_files WHERE parent = ?', ino)
         const row = cursor.next().value
         if (!row) throw new Error('ENOENT')
         if (Number(row.count) > 0) throw new Error('ENOTEMPTY')
-        this.ctx.storage.sql.exec('DELETE FROM files WHERE ino = ?', ino)
+        this.ctx.storage.sql.exec('DELETE FROM dofs_files WHERE ino = ?', ino)
       },
       listDir: (path: string, options?: ListDirOptions) => {
         const ino = this.resolvePathToInode(path)
-        const cursor = this.ctx.storage.sql.exec('SELECT name FROM files WHERE parent = ?', ino)
+        const cursor = this.ctx.storage.sql.exec('SELECT name FROM dofs_files WHERE parent = ?', ino)
         const names: string[] = ['.', '..']
         for (let row of cursor) {
           if (typeof row.name === 'string') names.push(row.name)
@@ -236,7 +257,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
       },
       stat: (path: string) => {
         const ino = this.resolvePathToInode(path)
-        const cursor = this.ctx.storage.sql.exec('SELECT attr, is_dir FROM files WHERE ino = ?', ino)
+        const cursor = this.ctx.storage.sql.exec('SELECT attr, is_dir FROM dofs_files WHERE ino = ?', ino)
         const row = cursor.next().value
         if (!row) throw new Error('ENOENT')
         const attr = typeof row.attr === 'string' ? JSON.parse(row.attr) : row.attr
@@ -261,14 +282,14 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
       },
       setattr: (path: string, options: SetAttrOptions) => {
         const ino = this.resolvePathToInode(path)
-        const cursor = this.ctx.storage.sql.exec('SELECT attr FROM files WHERE ino = ?', ino)
+        const cursor = this.ctx.storage.sql.exec('SELECT attr FROM dofs_files WHERE ino = ?', ino)
         const row = cursor.next().value
         if (!row) throw new Error('ENOENT')
         const attr = typeof row.attr === 'string' ? JSON.parse(row.attr) : row.attr
         if (options.mode !== undefined) attr.perm = options.mode
         if (options.uid !== undefined) attr.uid = options.uid
         if (options.gid !== undefined) attr.gid = options.gid
-        this.ctx.storage.sql.exec('UPDATE files SET attr = ? WHERE ino = ?', JSON.stringify(attr), ino)
+        this.ctx.storage.sql.exec('UPDATE dofs_files SET attr = ? WHERE ino = ?', JSON.stringify(attr), ino)
       },
       symlink: (target: string, path: string) => {
         const parts = path.split('/').filter(Boolean)
@@ -277,7 +298,11 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const parentPath = '/' + parts.slice(0, -1).join('/')
         const parent = this.resolvePathToInode(parentPath)
         // Check if already exists
-        const cursor = this.ctx.storage.sql.exec('SELECT ino FROM files WHERE parent = ? AND name = ?', parent, name)
+        const cursor = this.ctx.storage.sql.exec(
+          'SELECT ino FROM dofs_files WHERE parent = ? AND name = ?',
+          parent,
+          name
+        )
         if (cursor.next().value) throw new Error('EEXIST')
         const ino = this.allocInode()
         const now = Date.now()
@@ -300,7 +325,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         }
         const data = new TextEncoder().encode(target)
         this.ctx.storage.sql.exec(
-          'INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, ?)',
+          'INSERT INTO dofs_files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, ?)',
           ino,
           name,
           parent,
@@ -311,7 +336,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
       },
       readlink: (path: string) => {
         const ino = this.resolvePathToInode(path)
-        const cursor = this.ctx.storage.sql.exec('SELECT data FROM files WHERE ino = ?', ino)
+        const cursor = this.ctx.storage.sql.exec('SELECT data FROM dofs_files WHERE ino = ?', ino)
         const row = cursor.next().value
         if (!row || !row.data) throw new Error('ENOENT')
         let arr: Uint8Array
@@ -335,7 +360,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const oldParent = this.resolvePathToInode(oldParentPath)
         const newParent = this.resolvePathToInode(newParentPath)
         const oldCursor = this.ctx.storage.sql.exec(
-          'SELECT ino FROM files WHERE parent = ? AND name = ?',
+          'SELECT ino FROM dofs_files WHERE parent = ? AND name = ?',
           oldParent,
           oldName
         )
@@ -344,7 +369,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const ino = oldRow.ino
         // If destination exists, check if it's a non-empty directory
         const newCursor = this.ctx.storage.sql.exec(
-          'SELECT ino, is_dir FROM files WHERE parent = ? AND name = ?',
+          'SELECT ino, is_dir FROM dofs_files WHERE parent = ? AND name = ?',
           newParent,
           newName
         )
@@ -352,26 +377,28 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         if (newRow) {
           if (newRow.is_dir) {
             const childCursor = this.ctx.storage.sql.exec(
-              'SELECT COUNT(*) as count FROM files WHERE parent = ?',
+              'SELECT COUNT(*) as count FROM dofs_files WHERE parent = ?',
               newRow.ino
             )
             const childRow = childCursor.next().value
             if (childRow && Number(childRow.count) > 0)
               throw Object.assign(new Error('ENOTEMPTY'), { code: 'ENOTEMPTY' })
           }
-          this.ctx.storage.sql.exec('DELETE FROM files WHERE ino = ?', newRow.ino)
-          this.ctx.storage.sql.exec('DELETE FROM chunks WHERE ino = ?', newRow.ino)
+          this.ctx.storage.sql.exec('DELETE FROM dofs_files WHERE ino = ?', newRow.ino)
+          this.ctx.storage.sql.exec('DELETE FROM dofs_chunks WHERE ino = ?', newRow.ino)
         }
-        this.ctx.storage.sql.exec('UPDATE files SET parent = ?, name = ? WHERE ino = ?', newParent, newName, ino)
+        this.ctx.storage.sql.exec('UPDATE dofs_files SET parent = ?, name = ? WHERE ino = ?', newParent, newName, ino)
       },
       unlink: (path: string) => {
         const ino = this.resolvePathToInode(path)
-        const cursor = this.ctx.storage.sql.exec('SELECT is_dir FROM files WHERE ino = ?', ino)
+        const cursor = this.ctx.storage.sql.exec('SELECT is_dir FROM dofs_files WHERE ino = ?', ino)
         const row = cursor.next().value
         if (!row) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
         if (row.is_dir) throw Object.assign(new Error('EISDIR'), { code: 'EISDIR' })
-        this.ctx.storage.sql.exec('DELETE FROM files WHERE ino = ?', ino)
-        this.ctx.storage.sql.exec('DELETE FROM chunks WHERE ino = ?', ino)
+        this.ctx.storage.sql.exec('DELETE FROM dofs_files WHERE ino = ?', ino)
+        this.ctx.storage.sql.exec('DELETE FROM dofs_chunks WHERE ino = ?', ino)
+        // Update space used
+        this.updateFileSizeAndSpaceUsed(ino)
       },
       create: (path: string, options?: { mode?: number; umask?: number }) => {
         const parts = path.split('/').filter(Boolean)
@@ -380,7 +407,11 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const parentPath = '/' + parts.slice(0, -1).join('/')
         const parent = this.resolvePathToInode(parentPath)
         // Check if already exists
-        const cursor = this.ctx.storage.sql.exec('SELECT ino FROM files WHERE parent = ? AND name = ?', parent, name)
+        const cursor = this.ctx.storage.sql.exec(
+          'SELECT ino FROM dofs_files WHERE parent = ? AND name = ?',
+          parent,
+          name
+        )
         if (cursor.next().value) throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
         const ino = this.allocInode()
         const now = Date.now()
@@ -405,7 +436,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
           blksize: 512,
         }
         this.ctx.storage.sql.exec(
-          'INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, NULL)',
+          'INSERT INTO dofs_files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, NULL)',
           ino,
           name,
           parent,
@@ -418,7 +449,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         const CHUNK_SIZE = 4096
         // Delete all chunks past the new size
         const firstExcessChunk = Math.floor(size / CHUNK_SIZE) * CHUNK_SIZE
-        this.ctx.storage.sql.exec('DELETE FROM chunks WHERE ino = ? AND offset >= ?', ino, firstExcessChunk)
+        this.ctx.storage.sql.exec('DELETE FROM dofs_chunks WHERE ino = ? AND offset >= ?', ino, firstExcessChunk)
         // If the last chunk is partial, trim it
         if (size % CHUNK_SIZE !== 0) {
           const lastChunkOffset = Math.floor(size / CHUNK_SIZE) * CHUNK_SIZE
@@ -427,23 +458,34 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
           let chunkData = this.loadChunk(ino, lastChunkOffset, CHUNK_SIZE)
           chunkData = chunkData.subarray(0, lastLen)
           this.ctx.storage.sql.exec(
-            'UPDATE chunks SET data = ?, length = ? WHERE ino = ? AND offset = ?',
+            'UPDATE dofs_chunks SET data = ?, length = ? WHERE ino = ? AND offset = ?',
             chunkData,
             lastLen,
             ino,
             lastChunkOffset
           )
         }
-        // Update file size in attr
-        const attrCursor = this.ctx.storage.sql.exec('SELECT attr FROM files WHERE ino = ?', ino)
-        const attrRow = attrCursor.next().value
-        if (attrRow && attrRow.attr) {
-          const attr = typeof attrRow.attr === 'string' ? JSON.parse(attrRow.attr) : attrRow.attr
-          attr.size = size
-          this.ctx.storage.sql.exec('UPDATE files SET attr = ? WHERE ino = ?', JSON.stringify(attr), ino)
+        // Update file size and space used
+        this.updateFileSizeAndSpaceUsed(ino)
+      },
+      getDeviceStats: () => {
+        const size = this.getDeviceSize()
+        const used = this.getSpaceUsed()
+        return {
+          deviceSize: size,
+          spaceUsed: used,
+          spaceAvailable: size - used,
         }
       },
+      setDeviceSize: (newSize: number) => {
+        const used = this.getSpaceUsed()
+        if (newSize < used) {
+          throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+        }
+        this.ctx.storage.sql.exec('UPDATE dofs_meta SET value = ? WHERE key = ?', newSize.toString(), 'device_size')
+      },
     }
+    this.ctx.storage.fs = fs
   }
 
   private rootDirAttr() {
@@ -469,35 +511,53 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
 
   private ensureSchema() {
     this.ctx.storage.sql.exec(`
-			CREATE TABLE IF NOT EXISTS files (
-				ino INTEGER PRIMARY KEY,
-				name TEXT NOT NULL,
-				parent INTEGER,
-				is_dir INTEGER NOT NULL,
-				attr BLOB,
-				data BLOB
-			);
-			CREATE TABLE IF NOT EXISTS chunks (
-				ino INTEGER NOT NULL,
-				offset INTEGER NOT NULL,
-				data BLOB NOT NULL,
-				length INTEGER NOT NULL,
-				PRIMARY KEY (ino, offset)
-			);
-			CREATE INDEX IF NOT EXISTS idx_files_parent_name ON files(parent, name);
-			CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent);
-			CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
-			CREATE INDEX IF NOT EXISTS idx_chunks_ino ON chunks(ino);
-			CREATE INDEX IF NOT EXISTS idx_chunks_ino_offset ON chunks(ino, offset);
-		`)
+      CREATE TABLE IF NOT EXISTS dofs_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+      CREATE TABLE IF NOT EXISTS dofs_files (
+        ino INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        parent INTEGER,
+        is_dir INTEGER NOT NULL,
+        attr BLOB,
+        data BLOB
+      );
+      CREATE TABLE IF NOT EXISTS dofs_chunks (
+        ino INTEGER NOT NULL,
+        offset INTEGER NOT NULL,
+        data BLOB NOT NULL,
+        length INTEGER NOT NULL,
+        PRIMARY KEY (ino, offset)
+      );
+      CREATE INDEX IF NOT EXISTS idx_dofs_files_parent_name ON dofs_files(parent, name);
+      CREATE INDEX IF NOT EXISTS idx_dofs_files_parent ON dofs_files(parent);
+      CREATE INDEX IF NOT EXISTS idx_dofs_files_name ON dofs_files(name);
+      CREATE INDEX IF NOT EXISTS idx_dofs_chunks_ino ON dofs_chunks(ino);
+      CREATE INDEX IF NOT EXISTS idx_dofs_chunks_ino_offset ON dofs_chunks(ino, offset);
+    `)
+
+    // Ensure meta row exists
+    const metaCursor = this.ctx.storage.sql.exec('SELECT value FROM dofs_meta WHERE key = ?', 'device_size')
+    if (!metaCursor.next().value) {
+      this.ctx.storage.sql.exec(
+        'INSERT INTO dofs_meta (key, value) VALUES (?, ?)',
+        'device_size',
+        (1024 * 1024 * 1024).toString()
+      )
+    }
+    const usedCursor = this.ctx.storage.sql.exec('SELECT value FROM dofs_meta WHERE key = ?', 'space_used')
+    if (!usedCursor.next().value) {
+      this.ctx.storage.sql.exec('INSERT INTO dofs_meta (key, value) VALUES (?, ?)', 'space_used', '0')
+    }
 
     // Ensure root exists
-    const cursor = this.ctx.storage.sql.exec('SELECT COUNT(*) as count FROM files WHERE ino = ?', 1)
+    const cursor = this.ctx.storage.sql.exec('SELECT COUNT(*) as count FROM dofs_files WHERE ino = ?', 1)
     const row = cursor.next().value
     if (!row || row.count === 0) {
       const attr = this.rootDirAttr()
       this.ctx.storage.sql.exec(
-        'INSERT INTO files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, NULL)',
+        'INSERT INTO dofs_files (ino, name, parent, is_dir, attr, data) VALUES (?, ?, ?, ?, ?, NULL)',
         1,
         '/',
         undefined,
@@ -513,7 +573,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
     const parts = path.split('/').filter(Boolean)
     let parent = 1
     for (const name of parts) {
-      const cursor = this.ctx.storage.sql.exec('SELECT ino FROM files WHERE parent = ? AND name = ?', parent, name)
+      const cursor = this.ctx.storage.sql.exec('SELECT ino FROM dofs_files WHERE parent = ? AND name = ?', parent, name)
       const row = cursor.next().value
       if (!row || row.ino == null) throw new Error('ENOENT')
       parent = Number(row.ino)
@@ -523,7 +583,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
 
   // Add a sync version of allocInode for use in sync methods
   private allocInode(): number {
-    const cursor = this.ctx.storage.sql.exec('SELECT MAX(ino) as max FROM files')
+    const cursor = this.ctx.storage.sql.exec('SELECT MAX(ino) as max FROM dofs_files')
     const row = cursor.next().value
     return row && row.max != null ? Number(row.max) + 1 : 2
   }
@@ -531,7 +591,7 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
   // Helper to load a chunk as Uint8Array, or zero-filled if not present
   private loadChunk(ino: number, chunkOffset: number, chunkSize: number): Uint8Array {
     const chunkCursor = this.ctx.storage.sql.exec(
-      'SELECT data FROM chunks WHERE ino = ? AND offset = ?',
+      'SELECT data FROM dofs_chunks WHERE ino = ? AND offset = ?',
       ino,
       chunkOffset
     )
@@ -544,5 +604,53 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
       }
     }
     return new Uint8Array(chunkSize)
+  }
+
+  // Helper to get/set device size and space used
+  private getDeviceSize(): number {
+    const cursor = this.ctx.storage.sql.exec('SELECT value FROM dofs_meta WHERE key = ?', 'device_size')
+    const row = cursor.next().value
+    return row ? Number(row.value) : 1024 * 1024 * 1024
+  }
+  private getSpaceUsed(): number {
+    const cursor = this.ctx.storage.sql.exec('SELECT value FROM dofs_meta WHERE key = ?', 'space_used')
+    const row = cursor.next().value
+    return row ? Number(row.value) : 0
+  }
+  private setSpaceUsed(val: number) {
+    this.ctx.storage.sql.exec('UPDATE dofs_meta SET value = ? WHERE key = ?', val.toString(), 'space_used')
+  }
+  private updateFileSizeAndSpaceUsed(ino: number) {
+    // Sum all chunk lengths for this ino
+    const cursor = this.ctx.storage.sql.exec('SELECT SUM(length) as total FROM dofs_chunks WHERE ino = ?', ino)
+    const row = cursor.next().value
+    const size = row && row.total ? Number(row.total) : 0
+    // Update file attr
+    this.ctx.storage.sql.exec('UPDATE dofs_files SET attr = json_set(attr, "$.size", ?) WHERE ino = ?', size, ino)
+    // Update space_used (sum all chunk lengths for all files)
+    const usedCursor = this.ctx.storage.sql.exec('SELECT SUM(length) as total FROM dofs_chunks')
+    const usedRow = usedCursor.next().value
+    const used = usedRow && usedRow.total ? Number(usedRow.total) : 0
+    this.setSpaceUsed(used)
+  }
+
+  // Public method to get device stats (like `du`)
+  public getDeviceStats() {
+    const size = this.getDeviceSize()
+    const used = this.getSpaceUsed()
+    return {
+      deviceSize: size,
+      spaceUsed: used,
+      spaceAvailable: size - used,
+    }
+  }
+
+  // Public method to set device size
+  public setDeviceSize(newSize: number) {
+    const used = this.getSpaceUsed()
+    if (newSize < used) {
+      throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+    }
+    this.ctx.storage.sql.exec('UPDATE dofs_meta SET value = ? WHERE key = ?', newSize.toString(), 'device_size')
   }
 }

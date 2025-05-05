@@ -57,6 +57,9 @@ export class MyDurableObject extends DurableObjectFs<Env> {
   public unlink(path: string): void {
     return this.ctx.storage.fs.unlink(path)
   }
+  public getDeviceStats(): { deviceSize: number; spaceUsed: number; spaceAvailable: number } {
+    return this.ctx.storage.fs.getDeviceStats()
+  }
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -197,6 +200,12 @@ app.get('/api/stat', async (c) => {
   } catch (e) {
     return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
   }
+})
+
+app.get('/api/df', async (c) => {
+  const stub = getDofsStub(c.env)
+  const stats = await stub.getDeviceStats()
+  return c.json(stats)
 })
 
 app.all('*', async (c) => {
