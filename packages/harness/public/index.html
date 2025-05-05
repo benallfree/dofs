@@ -157,6 +157,7 @@
         },
         upload: () => {
           return new Promise((resolve) => {
+            term.writeln('Uploading...')
             const input = document.createElement('input')
             input.type = 'file'
             input.style.display = 'none'
@@ -165,6 +166,7 @@
               const file = input.files[0]
               if (!file) {
                 document.body.removeChild(input)
+                term.writeln('Upload cancelled.')
                 resolve('No file selected.')
                 return
               }
@@ -172,8 +174,19 @@
               formData.append('file', file)
               const xhr = new XMLHttpRequest()
               xhr.open('POST', `/api/upload?path=${encodeURIComponent(cwd)}`)
+              let lastPercent = -1
+              xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                  const percent = Math.floor((e.loaded / e.total) * 100)
+                  if (percent !== lastPercent) {
+                    term.write(`\rUploading... ${percent}%   `)
+                    lastPercent = percent
+                  }
+                }
+              }
               xhr.onload = () => {
                 document.body.removeChild(input)
+                term.writeln('\rUpload complete.         ')
                 if (xhr.status === 200) {
                   resolve(`Uploaded: ${file.name}`)
                 } else {
@@ -182,6 +195,7 @@
               }
               xhr.onerror = () => {
                 document.body.removeChild(input)
+                term.writeln('\rUpload failed.          ')
                 resolve('Upload failed: network error')
               }
               xhr.send(formData)
