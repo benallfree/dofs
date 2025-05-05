@@ -66,8 +66,23 @@ app.get('/', async (c) => {
   let id = env.MY_DURABLE_OBJECT.idFromName(`dofs`)
   let stub = env.MY_DURABLE_OBJECT.get(id)
   const entries = await stub.listDir('/')
-  const html = `<h1>Root Directory</h1><ul>${entries.map((e: string) => `<li>${e}</li>`).join('')}</ul>`
+  const html = `<!DOCTYPE html><html><head><title>Root Directory</title></head><body><h1>Root Directory</h1><form id="upload-form" action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:1em; padding:1em; text-align:center;"><input id="file-input" type="file" name="file" required><button type="submit">Upload</button></form><ul>${entries.map((e: string) => `<li>${e}</li>`).join('')}</ul></body></html>`
   return new Response(html, { headers: { 'content-type': 'text/html' } })
+})
+
+app.post('/upload', async (c) => {
+  const env = c.env
+  let id = env.MY_DURABLE_OBJECT.idFromName(`dofs`)
+  let stub = env.MY_DURABLE_OBJECT.get(id)
+  const formData = await c.req.formData()
+  const file = formData.get('file')
+  if (!file || typeof file === 'string') {
+    return c.text('No file uploaded', 400)
+  }
+  const arrayBuffer = await file.arrayBuffer()
+  console.log(`uploaded ${file.name}`)
+  await stub.writeFile('/' + file.name, arrayBuffer)
+  return c.redirect('/')
 })
 
 export default app
