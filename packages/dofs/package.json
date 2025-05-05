@@ -1,18 +1,10 @@
 {
   "name": "dofs",
   "version": "0.0.1",
-  "private": true,
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev",
     "cf-typegen": "wrangler types",
     "build": "tsup",
     "watch": "tsup --watch"
-  },
-  "devDependencies": {
-    "tsup": "^8.4.0",
-    "wrangler": "^4.14.1"
   },
   "main": "./dist/DurableObjectFs.mjs",
   "module": "./dist/DurableObjectFs.mjs",

@@ -20,6 +20,11 @@
     "packages/*"
   ],
   "devDependencies": {
-    "tsup": "^8.4.0"
-  }
+    "prettier": "^3.5.3",
+    "prettier-plugin-organize-imports": "^4.1.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.14.1"
+  },
+  "packageManager": "bun@1.1.13"
 }
