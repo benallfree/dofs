@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Durable Object File System Terminal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #181818;
+      }
+      #terminal {
+        height: 100vh;
+        width: 100vw;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal"></div>
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script>
+      const term = new window.Terminal({
+        theme: { background: '#181818', foreground: '#e0e0e0' },
+        fontFamily: 'monospace',
+        fontSize: 16,
+        cursorBlink: true,
+      })
+      term.open(document.getElementById('terminal'))
+      term.write('Connected to Durable Object File System! Type "help" for commands.\r\n$ ')
+      let buffer = ''
+      const allowedCommands = {
+        help: () => 'Allowed commands: help, echo, date, ls',
+        echo: (args) => args.join(' '),
+        date: () => new Date().toString(),
+        ls: async (args) => {
+          const path = args[0] || '/'
+          try {
+            const res = await fetch(`/api/ls?path=${encodeURIComponent(path)}`)
+            if (!res.ok) return 'Error: could not list directory'
+            const stats = await res.json()
+            function modeStr(mode, isDir) {
+              if (mode == null) return '??????????'
+              const types = isDir ? 'd' : '-'
+              const perms = [
+                mode & 0o400 ? 'r' : '-',
+                mode & 0o200 ? 'w' : '-',
+                mode & 0o100 ? 'x' : '-',
+                mode & 0o040 ? 'r' : '-',
+                mode & 0o020 ? 'w' : '-',
+                mode & 0o010 ? 'x' : '-',
+                mode & 0o004 ? 'r' : '-',
+                mode & 0o002 ? 'w' : '-',
+                mode & 0o001 ? 'x' : '-',
+              ].join('')
+              return types + perms
+            }
+            function humanSize(size) {
+              if (size == null) return '?'
+              if (size < 1024) return size + 'B'
+              if (size < 1024 * 1024) return (size / 1024).toFixed(1).replace(/\.0$/, '') + 'K'
+              if (size < 1024 * 1024 * 1024) return (size / (1024 * 1024)).toFixed(1).replace(/\.0$/, '') + 'M'
+              return (size / (1024 * 1024 * 1024)).toFixed(1).replace(/\.0$/, '') + 'G'
+            }
+            function mtimeStr(mtime) {
+              if (!mtime) return '?'
+              const d = new Date(mtime)
+              const mon = d.toLocaleString('en-US', { month: 'short' })
+              const day = d.getDate().toString().padStart(2, ' ')
+              const time = d.toTimeString().slice(0, 5)
+              return `${mon} ${day} ${time}`
+            }
+            // Calculate max width for each column
+            let maxMode = 10,
+              maxNlink = 1,
+              maxUid = 1,
+              maxGid = 1,
+              maxSize = 1,
+              maxMtime = 12
+            stats.forEach((f) => {
+              if (!f.error) {
+                maxMode = Math.max(maxMode, modeStr(f.mode, f.isDirectory).length)
+                maxNlink = Math.max(maxNlink, (f.nlink ?? 1).toString().length)
+                maxUid = Math.max(maxUid, (f.uid ?? '?').toString().length)
+                maxGid = Math.max(maxGid, (f.gid ?? '?').toString().length)
+                maxSize = Math.max(maxSize, humanSize(f.size).length)
+                maxMtime = Math.max(maxMtime, mtimeStr(f.mtime).length)
+              }
+            })
+            function padR(str, len) {
+              str = String(str)
+              return str.padEnd(len, ' ')
+            }
+            function padL(str, len) {
+              str = String(str)
+              return str.padStart(len, ' ')
+            }
+            const lines = stats.map((f) => {
+              if (f.error)
+                return `${padR('?', maxMode)} ${padL('?', maxNlink)} ${padR('?', maxUid)} ${padR('?', maxGid)} ${padL('?', maxSize)} ${padR('?', maxMtime)} ${f.name} (error)`
+              return [
+                padR(modeStr(f.mode, f.isDirectory), maxMode),
+                padL(f.nlink ?? 1, maxNlink),
+                padR(f.uid ?? '?', maxUid),
+                padR(f.gid ?? '?', maxGid),
+                padL(humanSize(f.size), maxSize),
+                padR(mtimeStr(f.mtime), maxMtime),
+                f.name + (f.isDirectory ? '/' : ''),
+              ].join(' ')
+            })
+            return lines.join('\r\n')
+          } catch (e) {
+            return 'Error: ' + e.message
+          }
+        },
+      }
+      term.onData(async (e) => {
+        if (e === '\r') {
+          // Enter
+          const [cmd, ...args] = buffer.trim().split(' ')
+          term.writeln('')
+          if (allowedCommands[cmd]) {
+            const result = allowedCommands[cmd](args)
+            if (result instanceof Promise) {
+              term.writeln(await result)
+            } else {
+              term.writeln(result)
+            }
+          } else if (cmd.length > 0) {
+            term.writeln('Command not found')
+          }
+          buffer = ''
+          term.write('$ ')
+        } else if (e === '\u007F') {
+          // Backspace
+          if (buffer.length > 0) {
+            buffer = buffer.slice(0, -1)
+            term.write('\b \b')
+          }
+        } else if (e >= ' ' && e <= '~') {
+          // Printable
+          buffer += e
+          term.write(e)
+        }
+      })
+    </script>
+  </body>
+</html>

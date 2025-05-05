@@ -3,7 +3,7 @@
  * https://developers.cloudflare.com/workers/wrangler/configuration/
  */
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "dofs",
   "main": "src/index.ts",
   "compatibility_date": "2025-05-04",
@@ -51,7 +51,7 @@
    * Static Assets
    * https://developers.cloudflare.com/workers/static-assets/binding/
    */
-  // "assets": { "directory": "./public/", "binding": "ASSETS" },
+  "assets": { "directory": "./public/", "binding": "ASSETS", "not_found_handling": "single-page-application" },
 
   /**
    * Service Bindings (communicate between multiple Workers)
