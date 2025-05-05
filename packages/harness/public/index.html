@@ -33,6 +33,7 @@
       let buffer = ''
       let history = []
       let historyIndex = -1
+      let autocompleteState = null // {candidates, prefix, insertPos, cycleIndex, lastBuffer}
       const allowedCommands = {
         help: () => 'Allowed commands: help, echo, date, ls, open, upload',
         echo: (args) => args.join(' '),
@@ -159,6 +160,35 @@
           })
         },
       }
+      const allCommands = Object.keys(allowedCommands)
+      async function getCompletions(cmd, argPrefix, cwd = '/') {
+        // Only complete for file args (not command name)
+        let path = argPrefix
+        let base = ''
+        if (!path || path.endsWith('/')) {
+          base = path || '/'
+          path = ''
+        } else {
+          const idx = path.lastIndexOf('/')
+          if (idx >= 0) {
+            base = path.slice(0, idx + 1)
+            path = path.slice(idx + 1)
+          } else {
+            base = ''
+          }
+        }
+        try {
+          const res = await fetch(`/api/ls?path=${encodeURIComponent(base || '/')}`)
+          if (!res.ok) return []
+          const stats = await res.json()
+          return stats
+            .filter((f) => !f.error && f.name.startsWith(path))
+            .map((f) => f.name + (f.isDirectory ? '/' : ''))
+            .sort()
+        } catch {
+          return []
+        }
+      }
       term.onData(async (e) => {
         if (e === '\r') {
           // Enter
@@ -207,11 +237,83 @@
             term.write(`\r\x1b[K$ `)
             buffer = ''
           }
+        } else if (e === '\t') {
+          // TAB
+          // Find word to complete (after last space, or command)
+          let parts = buffer.split(/ +/)
+          let isCmd = buffer.trim().length === 0 || buffer.match(/^\s*\S*$/)
+          let insertPos = buffer.length
+          let prefix = ''
+          if (isCmd) {
+            prefix = parts[0] || ''
+            insertPos = buffer.length
+            // Complete command
+            let candidates = allCommands.filter((c) => c.startsWith(prefix))
+            if (!candidates.length) return
+            if (!autocompleteState || autocompleteState.lastBuffer !== buffer) {
+              autocompleteState = { candidates, prefix, insertPos, cycleIndex: 0, lastBuffer: buffer }
+            } else {
+              autocompleteState.cycleIndex = (autocompleteState.cycleIndex + 1) % candidates.length
+            }
+            let common = candidates[0]
+            for (let c of candidates) {
+              let i = 0
+              while (i < common.length && c[i] === common[i]) i++
+              common = common.slice(0, i)
+            }
+            let toInsert = candidates.length === 1 ? candidates[0] : common
+            // Rewrite line
+            term.write(`\r\x1b[K$ ` + toInsert)
+            buffer = toInsert
+            if (candidates.length > 1 && autocompleteState.cycleIndex === 0) {
+              term.writeln('\r\n' + candidates.join('  '))
+              term.write(`$ ` + toInsert)
+            } else if (candidates.length > 1) {
+              let pick = candidates[autocompleteState.cycleIndex]
+              term.write(`\r\x1b[K$ ` + pick)
+              buffer = pick
+            }
+            return
+          } else {
+            // Complete file/dir
+            let argIdx = parts.length - 1
+            prefix = parts[argIdx] || ''
+            insertPos = buffer.lastIndexOf(prefix)
+            let candidates = await getCompletions(parts[0], prefix)
+            if (!candidates.length) return
+            if (!autocompleteState || autocompleteState.lastBuffer !== buffer) {
+              autocompleteState = { candidates, prefix, insertPos, cycleIndex: 0, lastBuffer: buffer }
+            } else {
+              autocompleteState.cycleIndex = (autocompleteState.cycleIndex + 1) % candidates.length
+            }
+            let common = candidates[0]
+            for (let c of candidates) {
+              let i = 0
+              while (i < common.length && c[i] === common[i]) i++
+              common = common.slice(0, i)
+            }
+            let toInsert = candidates.length === 1 ? candidates[0] : common
+            let newBuffer = buffer.slice(0, insertPos) + toInsert
+            // Rewrite line
+            term.write(`\r\x1b[K$ ` + newBuffer)
+            buffer = newBuffer
+            if (candidates.length > 1 && autocompleteState.cycleIndex === 0) {
+              term.writeln('\r\n' + candidates.join('  '))
+              term.write(`$ ` + newBuffer)
+            } else if (candidates.length > 1) {
+              let pick = candidates[autocompleteState.cycleIndex]
+              let newBuffer2 = buffer.slice(0, insertPos) + pick
+              term.write(`\r\x1b[K$ ` + newBuffer2)
+              buffer = newBuffer2
+            }
+            return
+          }
         } else if (e >= ' ' && e <= '~') {
           // Printable
           buffer += e
           term.write(e)
         }
+        autocompleteState = null
       })
     </script>
   </body>
