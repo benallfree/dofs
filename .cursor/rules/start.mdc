@@ -11,4 +11,6 @@ This is a monorepo.
 * when making changes to /packages/dofs-rust-client:
     * run `cargo build` after each change to be sure it compiles
     * run `cargo test` after each change to be sure it passes tests
-
+* when making changes to /packages/dofs:
+    * do not automatically build
+    * do not automatically install packages
