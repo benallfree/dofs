@@ -97,4 +97,30 @@ app.get('/api/ls', async (c) => {
   return c.json(stats)
 })
 
+app.get('/api/file', async (c) => {
+  const env = c.env
+  const path = c.req.query('path')
+  if (!path) return c.text('Missing path', 400)
+  let id = env.MY_DURABLE_OBJECT.idFromName('dofs')
+  let stub = env.MY_DURABLE_OBJECT.get(id)
+  try {
+    const data = await stub.readFile(path)
+    // Try to guess content type from extension
+    const ext = (path.split('.').pop() || '').toLowerCase()
+    const typeMap = {
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      bmp: 'image/bmp',
+      svg: 'image/svg+xml',
+    }
+    const contentType = typeMap[ext as keyof typeof typeMap] || 'application/octet-stream'
+    return new Response(data, { headers: { 'content-type': contentType } })
+  } catch (e) {
+    return c.text('Not found', 404)
+  }
+})
+
 export default app
