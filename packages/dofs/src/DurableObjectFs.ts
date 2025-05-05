@@ -143,7 +143,17 @@ export class DurableObjectFs<Env = unknown> extends DurableObject<Env> {
         return result.buffer
       },
       write: (path: string, data: ArrayBuffer | string, options: WriteOptions) => {
-        const ino = this.resolvePathToInode(path)
+        let ino: number
+        try {
+          ino = this.resolvePathToInode(path)
+        } catch (e: any) {
+          if (e instanceof Error && e.message === 'ENOENT') {
+            this.ctx.storage.fs.create(path)
+            ino = this.resolvePathToInode(path)
+          } else {
+            throw e
+          }
+        }
         const offset = options?.offset ?? 0
         const buf = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data)
         // Check available space
