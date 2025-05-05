@@ -74,8 +74,11 @@ app.post('/api/upload', async (c) => {
     return c.text('No file uploaded', 400)
   }
   const arrayBuffer = await file.arrayBuffer()
-  console.log(`uploaded ${file.name}`)
-  await stub.writeFile('/' + file.name, arrayBuffer)
+  const dir = c.req.query('path') || '/'
+  // Ensure no double slashes and always one slash between dir and file name
+  const path = (dir.endsWith('/') ? dir : dir + '/') + file.name
+  console.log(`uploaded ${file.name} to ${path}`)
+  await stub.writeFile(path, arrayBuffer)
   return c.redirect('/')
 })
 

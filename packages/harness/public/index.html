@@ -182,7 +182,7 @@
               const formData = new FormData()
               formData.append('file', file)
               const xhr = new XMLHttpRequest()
-              xhr.open('POST', '/api/upload')
+              xhr.open('POST', `/api/upload?path=${encodeURIComponent(cwd)}`)
               xhr.onload = () => {
                 document.body.removeChild(input)
                 if (xhr.status === 200) {
