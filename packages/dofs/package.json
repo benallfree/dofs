@@ -6,13 +6,13 @@
     "build": "tsup",
     "watch": "tsup --watch"
   },
-  "main": "./dist/DurableObjectFs.mjs",
-  "module": "./dist/DurableObjectFs.mjs",
-  "types": "./dist/DurableObjectFs.d.mts",
+  "main": "./dist/Fs.mjs",
+  "module": "./dist/Fs.mjs",
+  "types": "./dist/Fs.d.mts",
   "exports": {
     ".": {
-      "import": "./dist/DurableObjectFs.mjs",
-      "types": "./dist/DurableObjectFs.d.mts"
+      "import": "./dist/Fs.mjs",
+      "types": "./dist/Fs.d.mts"
     }
   },
   "packageManager": "bun@1.1.13"

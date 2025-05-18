@@ -1,10 +1,10 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/DurableObjectFs.ts'],
+  entry: ['src/Fs.ts'],
   format: ['esm'],
   dts: true,
   external: ['cloudflare:workers'],
   outDir: 'dist',
   clean: true,
-}) 
+})
