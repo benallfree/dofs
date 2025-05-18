@@ -15,14 +15,14 @@ A filesystem-like API for Cloudflare Durable Objects, supporting streaming reads
 
 ```ts
 import { DurableObject } from 'cloudflare:workers'
-import { DurableObjectFs } from 'dofs'
+import { Fs } from 'dofs'
 
 export class MyDurableObject extends DurableObject<Env> {
-  private fs: DurableObjectFs
+  private fs: Fs
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
-    this.fs = new DurableObjectFs(ctx, env)
+    this.fs = new Fs(ctx, env)
   }
 
   // Expose fs methods as needed

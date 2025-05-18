@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import {
-  DurableObjectFs,
+  Fs,
   ListDirOptions,
   MkdirOptions,
   ReadFileOptions,
@@ -13,11 +13,11 @@ import {
 import { Hono } from 'hono'
 
 export class MyDurableObject extends DurableObject<Env> {
-  private fs: DurableObjectFs
+  private fs: Fs
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
-    this.fs = new DurableObjectFs(ctx, env)
+    this.fs = new Fs(ctx, env)
   }
 
   // Expose all fs methods as sync public methods

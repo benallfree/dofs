@@ -31,16 +31,16 @@ export type Stat = {
   kind?: string
 }
 
-export type DurableObjectFsOptions = {
+export type FsOptions = {
   chunkSize?: number
 }
 
-export class DurableObjectFs {
+export class Fs {
   protected ctx: DurableObjectState
   protected env: Env
   protected chunkSize: number
 
-  constructor(ctx: DurableObjectState, env: Env, options?: DurableObjectFsOptions) {
+  constructor(ctx: DurableObjectState, env: Env, options?: FsOptions) {
     this.env = env
     this.ctx = ctx
     this.chunkSize = options?.chunkSize ?? 4096 // 4kb
