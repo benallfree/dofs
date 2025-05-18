@@ -24,8 +24,8 @@ export class MyDurableObject extends DurableObject<Env> {
   public readFile(path: string, options?: ReadFileOptions) {
     return this.fs.readFile(path, options)
   }
-  public writeFile(path: string, data: ArrayBuffer | string, options?: WriteFileOptions) {
-    return this.fs.writeFile(path, data, options)
+  public writeFile(path: string, stream: any, options?: WriteFileOptions) {
+    return this.fs.writeFile(path, stream, options)
   }
   public read(path: string, options: ReadOptions) {
     return this.fs.read(path, options)
@@ -79,22 +79,9 @@ app.post('/api/upload', async (c) => {
   if (!file || typeof file === 'string') {
     return c.text('No file uploaded', 400)
   }
-  const arrayBuffer = await file.arrayBuffer()
   const dir = c.req.query('path') || '/'
   const finalPath = (dir.endsWith('/') ? dir : dir + '/') + file.name
-  const tempPath = finalPath + '.uploading'
-  const CHUNK_SIZE = 1024 * 1024 // 1MB
-  const buf = new Uint8Array(arrayBuffer)
-  console.log('writing', { length: buf.length })
-  let offset = 0
-  while (offset < buf.length) {
-    const end = Math.min(offset + CHUNK_SIZE, buf.length)
-    const chunk = buf.slice(offset, end)
-    console.log('writing chunk', { offset, length: chunk.length })
-    await stub.write(tempPath, chunk, { offset })
-    offset = end
-  }
-  await stub.rename(tempPath, finalPath)
+  await stub.writeFile(finalPath, file.stream())
   return c.redirect('/')
 })
 
