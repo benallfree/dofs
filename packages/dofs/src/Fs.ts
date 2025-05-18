@@ -39,7 +39,7 @@ export interface IDurableObjectFs {
   readFile(path: string, options?: ReadFileOptions): ReadableStream<Uint8Array>
   writeFile(path: string, data: ArrayBuffer | string | ReadableStream<Uint8Array>, options?: WriteFileOptions): void
   read(path: string, options: ReadOptions): ArrayBuffer
-  write(path: string, data: ArrayBuffer | string | ReadableStream<Uint8Array>, options: WriteOptions): void
+  write(path: string, data: ArrayBuffer | string, options: WriteOptions): void
   mkdir(path: string, options?: MkdirOptions): void
   rmdir(path: string, options?: RmdirOptions): void
   listDir(path: string, options?: ListDirOptions): string[]
