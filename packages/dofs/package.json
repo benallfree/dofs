@@ -1,7 +1,7 @@
 {
   "name": "dofs",
   "description": "A filesystem for Cloudflare Durable Objects.",
-  "version": "0.0.1-rc.1",
+  "version": "0.0.1-rc.2",
   "author": {
     "name": "Ben Allfree",
     "url": "https://x.com/benallfree"
