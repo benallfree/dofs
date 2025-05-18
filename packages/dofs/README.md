@@ -92,8 +92,10 @@ On the consumer side, you can call these methods via your RPC/stub mechanism, pa
 
 ## API
 
+**Note:** These are async from the CF Worker stub (RPC call), but are sync when called inside the Durable Object (direct call).
+
 - `fs.readFile(path: string): ReadableStream<Uint8Array>`
-- `fs.writeFile(path: string, data: string | ArrayBuffer | ReadableStream<Uint8Array>): Promise<void>`
+- `fs.writeFile(path: string, data: string | ArrayBuffer | ReadableStream<Uint8Array>): void`
 - `fs.read(path: string, options): ArrayBuffer` (non-streaming, offset/length)
 - `fs.write(path: string, data, options): void` (non-streaming, offset)
 - `fs.mkdir(path: string, options?): void`
@@ -104,5 +106,3 @@ On the consumer side, you can call these methods via your RPC/stub mechanism, pa
 - `fs.rename(oldPath: string, newPath: string): void`
 - `fs.symlink(target: string, path: string): void`
 - `fs.readlink(path: string): string`
-
-See the source for more details and options.
