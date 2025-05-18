@@ -95,7 +95,11 @@ export class DurableObjectFs {
     })
   }
 
-  public writeFile(path: string, data: ArrayBuffer | string, options?: WriteFileOptions) {
+  public async writeFile(
+    path: string,
+    data: ArrayBuffer | string | ReadableStream<Uint8Array>,
+    options?: WriteFileOptions
+  ) {
     // Try to unlink if exists
     try {
       this.unlink(path)
@@ -105,14 +109,55 @@ export class DurableObjectFs {
     // Check available space before creating
     const deviceSize = this.getDeviceSize()
     const spaceUsed = this.getSpaceUsed()
-    const buf = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data)
-    if (spaceUsed + buf.length > deviceSize) {
-      throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
-    }
     // Create the file
     this.create(path)
-    // Write the data
-    this.write(path, data, { offset: 0, encoding: options?.encoding })
+    // Handle streaming upload
+    if (typeof data === 'object' && data !== null && typeof (data as any).getReader === 'function') {
+      // Stream case
+      const CHUNK_SIZE = 1024 * 1024 // 1MB
+      let offset = 0
+      let total = 0
+      const reader = (data as ReadableStream<Uint8Array>).getReader()
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        if (!value) continue
+        if (spaceUsed + total + value.length > deviceSize) {
+          throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+        }
+        // Write chunk
+        this.write(path, value, { offset, encoding: options?.encoding })
+        offset += value.length
+        total += value.length
+      }
+      return
+    }
+    // Buffer or string case
+    if (typeof data === 'string') {
+      const buf = new TextEncoder().encode(data)
+      if (spaceUsed + buf.length > deviceSize) {
+        throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+      }
+      this.write(path, buf, { offset: 0, encoding: options?.encoding })
+      return
+    }
+    if (data instanceof ArrayBuffer) {
+      const buf = new Uint8Array(data)
+      if (spaceUsed + buf.length > deviceSize) {
+        throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+      }
+      this.write(path, buf, { offset: 0, encoding: options?.encoding })
+      return
+    }
+    if (ArrayBuffer.isView(data)) {
+      const buf = new Uint8Array(data.buffer)
+      if (spaceUsed + buf.length > deviceSize) {
+        throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
+      }
+      this.write(path, buf, { offset: 0, encoding: options?.encoding })
+      return
+    }
+    throw new Error('Unsupported data type for writeFile')
   }
 
   public read(path: string, options: ReadOptions) {
