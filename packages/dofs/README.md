@@ -38,6 +38,24 @@ export class MyDurableObject extends DurableObject<Env> {
 }
 ```
 
+### 1a. Customizing chunk size
+
+By default, the chunk size is 64kb. You can configure it by passing the `chunkSize` option (in bytes) to the `Fs` constructor:
+
+```ts
+import { Fs } from 'dofs'
+
+const fs = new Fs(ctx, env, { chunkSize: 256 * 1024 }) // 256kb chunks
+```
+
+**How chunk size affects query frequency and cost:**
+
+- Smaller chunk sizes mean more database queries per file read/write, which can increase Durable Object query costs and latency.
+- Larger chunk sizes reduce the number of queries (lower cost, better throughput), but may use more memory per operation and can be less efficient for small files or random access.
+- Choose a chunk size that balances your workload's cost, performance, and memory needs.
+
+> **Note:** Chunk size cannot be changed after the first file has been written to the filesystem. It is fixed for the lifetime of the filesystem instance.
+
 ### 2. Exposing methods publicly
 
 You can expose methods on your Durable Object class that call into the `fs` instance. For example, to support streaming uploads and downloads:
