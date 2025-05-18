@@ -22,46 +22,46 @@ export class MyDurableObject extends DurableObject<Env> {
   }
 
   // Expose all fs methods as sync public methods
-  public readFile(path: string, options?: ReadFileOptions): ArrayBuffer | string {
+  public readFile(path: string, options?: ReadFileOptions) {
     return this.fs.readFile(path, options)
   }
-  public writeFile(path: string, data: ArrayBuffer | string, options?: WriteFileOptions): void {
+  public writeFile(path: string, data: ArrayBuffer | string, options?: WriteFileOptions) {
     return this.fs.writeFile(path, data, options)
   }
-  public read(path: string, options: ReadOptions): ArrayBuffer {
+  public read(path: string, options: ReadOptions) {
     return this.fs.read(path, options)
   }
-  public write(path: string, data: ArrayBuffer | string, options: WriteOptions): void {
+  public write(path: string, data: ArrayBuffer | string, options: WriteOptions) {
     return this.fs.write(path, data, options)
   }
-  public mkdir(path: string, options?: MkdirOptions): void {
+  public mkdir(path: string, options?: MkdirOptions) {
     return this.fs.mkdir(path, options)
   }
-  public rmdir(path: string, options?: RmdirOptions): void {
+  public rmdir(path: string, options?: RmdirOptions) {
     return this.fs.rmdir(path, options)
   }
-  public listDir(path: string, options?: ListDirOptions): string[] {
+  public listDir(path: string, options?: ListDirOptions) {
     return this.fs.listDir(path, options)
   }
-  public stat(path: string): Stat {
+  public stat(path: string) {
     return this.fs.stat(path)
   }
-  public setattr(path: string, options: SetAttrOptions): void {
+  public setattr(path: string, options: SetAttrOptions) {
     return this.fs.setattr(path, options)
   }
-  public symlink(target: string, path: string): void {
+  public symlink(target: string, path: string) {
     return this.fs.symlink(target, path)
   }
-  public readlink(path: string): string {
+  public readlink(path: string) {
     return this.fs.readlink(path)
   }
-  public rename(oldPath: string, newPath: string): void {
+  public rename(oldPath: string, newPath: string) {
     return this.fs.rename(oldPath, newPath)
   }
-  public unlink(path: string): void {
+  public unlink(path: string) {
     return this.fs.unlink(path)
   }
-  public getDeviceStats(): { deviceSize: number; spaceUsed: number; spaceAvailable: number } {
+  public getDeviceStats() {
     return this.fs.getDeviceStats()
   }
 }
