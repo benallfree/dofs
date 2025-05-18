@@ -30,13 +30,20 @@ export type Stat = {
   blksize?: number
   kind?: string
 }
+
+export type DurableObjectFsOptions = {
+  chunkSize?: number
+}
+
 export class DurableObjectFs {
   protected ctx: DurableObjectState
   protected env: Env
+  protected chunkSize: number
 
-  constructor(ctx: DurableObjectState, env: Env) {
+  constructor(ctx: DurableObjectState, env: Env, options?: DurableObjectFsOptions) {
     this.env = env
     this.ctx = ctx
+    this.chunkSize = options?.chunkSize ?? 4096 // 4kb
     this.ctx.blockConcurrencyWhile(async () => {
       this.ensureSchema()
     })
@@ -150,7 +157,7 @@ export class DurableObjectFs {
     if (spaceUsed + additional > deviceSize) {
       throw Object.assign(new Error('ENOSPC'), { code: 'ENOSPC' })
     }
-    const CHUNK_SIZE = 4096
+    const CHUNK_SIZE = this.chunkSize
     let written = 0
     let maxEnd = 0
     while (written < buf.length) {
@@ -432,7 +439,7 @@ export class DurableObjectFs {
 
   public truncate(path: string, size: number) {
     const ino = this.resolvePathToInode(path)
-    const CHUNK_SIZE = 4096
+    const CHUNK_SIZE = this.chunkSize
     // Delete all chunks past the new size
     const firstExcessChunk = Math.floor(size / CHUNK_SIZE) * CHUNK_SIZE
     this.ctx.storage.sql.exec('DELETE FROM dofs_chunks WHERE ino = ? AND offset >= ?', ino, firstExcessChunk)
