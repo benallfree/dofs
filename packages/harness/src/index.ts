@@ -17,7 +17,7 @@ export class MyDurableObject extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
-    this.fs = new Fs(ctx, env)
+    this.fs = new Fs(ctx, env, { chunkSize: 4 * 1024 })
   }
 
   // Expose all fs methods as sync public methods
