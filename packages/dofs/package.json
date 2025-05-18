@@ -37,5 +37,8 @@
       "import": "./dist/Fs.mjs",
       "types": "./dist/Fs.d.mts"
     }
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
