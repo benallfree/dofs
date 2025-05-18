@@ -6,6 +6,7 @@
     "dofs-harness": "0.0.1"
   },
   "changesets": [
+    "moody-bikes-hear",
     "ten-onions-smile"
   ]
 }
