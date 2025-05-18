@@ -56,6 +56,25 @@ const fs = new Fs(ctx, env, { chunkSize: 256 * 1024 }) // 256kb chunks
 
 > **Note:** Chunk size cannot be changed after the first file has been written to the filesystem. It is fixed for the lifetime of the filesystem instance.
 
+### 1b. Setting device size
+
+By default, the device size (total storage available) is 1GB (`1024 * 1024 * 1024` bytes). You can change this limit using the `setDeviceSize` method:
+
+```ts
+fs.setDeviceSize(10 * 1024 * 1024 * 1024) // Set device size to 10GB
+```
+
+- The device size must be set before writing data that would exceed the current limit.
+- If you try to write more data than the device size allows, an `ENOSPC` error will be thrown.
+- You can check the current device size and usage with `fs.getDeviceStats()`.
+
+```ts
+const stats = fs.getDeviceStats()
+console.log(stats.deviceSize, stats.spaceUsed, stats.spaceAvailable)
+```
+
+> **Default:** 1GB if not set.
+
 ### 2. Exposing methods publicly
 
 You can expose methods on your Durable Object class that call into the `fs` instance. For example, to support streaming uploads and downloads:
