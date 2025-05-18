@@ -1,0 +1,11 @@
+{
+  "mode": "pre",
+  "tag": "rc",
+  "initialVersions": {
+    "dofs": "0.0.1",
+    "dofs-harness": "0.0.1"
+  },
+  "changesets": [
+    "ten-onions-smile"
+  ]
+}

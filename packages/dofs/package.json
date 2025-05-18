@@ -1,6 +1,29 @@
 {
   "name": "dofs",
-  "version": "0.0.1",
+  "description": "A filesystem for Cloudflare Durable Objects.",
+  "version": "0.0.1-rc.0",
+  "author": {
+    "name": "Ben Allfree",
+    "url": "https://x.com/benallfree"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benallfree/dofs"
+  },
+  "keywords": [
+    "cloudflare",
+    "durable objects",
+    "dofs",
+    "filesystem",
+    "file system",
+    "file-system",
+    "file-system-api",
+    "file-system-api-client",
+    "file-system-api-server",
+    "file-system-api-client-server"
+  ],
+  "homepage": "https://github.com/benallfree/dofs/tree/main/packages/dofs",
   "scripts": {
     "cf-typegen": "wrangler types",
     "build": "tsup",
@@ -14,6 +37,5 @@
       "import": "./dist/Fs.mjs",
       "types": "./dist/Fs.d.mts"
     }
-  },
-  "packageManager": "bun@1.1.13"
+  }
 }
