@@ -43,7 +43,7 @@ export class Fs {
   constructor(ctx: DurableObjectState, env: Env, options?: FsOptions) {
     this.env = env
     this.ctx = ctx
-    this.chunkSize = options?.chunkSize ?? 4096 // 4kb
+    this.chunkSize = options?.chunkSize ?? 64 * 1024 // 64kb
     this.ctx.blockConcurrencyWhile(async () => {
       this.ensureSchema()
     })
