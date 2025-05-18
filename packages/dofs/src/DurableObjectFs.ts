@@ -51,26 +51,48 @@ export class DurableObjectFs {
 
   public readFile(path: string, options?: ReadFileOptions) {
     const ino = this.resolvePathToInode(path)
-    const cursor = this.ctx.storage.sql.exec(
-      'SELECT offset, data, length FROM dofs_chunks WHERE ino = ? ORDER BY offset ASC',
-      ino
-    )
-    let chunks: Uint8Array[] = []
-    let total = 0
-    for (let row of cursor) {
-      if (row.data && (row.data instanceof ArrayBuffer || ArrayBuffer.isView(row.data))) {
-        const arr = row.data instanceof ArrayBuffer ? new Uint8Array(row.data) : new Uint8Array(row.data.buffer)
-        chunks.push(arr)
-        total += arr.length
-      }
-    }
-    const result = new Uint8Array(total)
-    let offset = 0
-    for (const chunk of chunks) {
-      result.set(chunk, offset)
-      offset += chunk.length
-    }
-    return result.buffer
+    // Get file size
+    const statCursor = this.ctx.storage.sql.exec('SELECT attr FROM dofs_files WHERE ino = ?', ino)
+    const statRow = statCursor.next().value
+    if (!statRow || !statRow.attr) throw new Error('ENOENT')
+    const attr = typeof statRow.attr === 'string' ? JSON.parse(statRow.attr) : statRow.attr
+    const fileSize = attr.size || 0
+    let currentOffset = 0
+    const self = this
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        console.log('pull', { currentOffset, fileSize })
+        if (currentOffset >= fileSize) {
+          controller.close()
+          return
+        }
+        const readLength = Math.min(self.chunkSize, fileSize - currentOffset)
+        // Read chunk from DB
+        const chunkCursor = self.ctx.storage.sql.exec(
+          'SELECT data FROM dofs_chunks WHERE ino = ? AND offset = ? LIMIT 1',
+          ino,
+          currentOffset
+        )
+        const chunkRow = chunkCursor.next().value
+        let chunk: Uint8Array
+        if (chunkRow && chunkRow.data) {
+          if (chunkRow.data instanceof ArrayBuffer) {
+            chunk = new Uint8Array(chunkRow.data)
+          } else if (ArrayBuffer.isView(chunkRow.data)) {
+            chunk = new Uint8Array(chunkRow.data.buffer)
+          } else if (typeof chunkRow.data === 'string') {
+            chunk = Uint8Array.from(chunkRow.data)
+          } else {
+            chunk = new Uint8Array(0)
+          }
+        } else {
+          chunk = new Uint8Array(0)
+        }
+        console.log('chunk', { chunk })
+        controller.enqueue(chunk)
+        currentOffset += readLength
+      },
+    })
   }
 
   public writeFile(path: string, data: ArrayBuffer | string, options?: WriteFileOptions) {
