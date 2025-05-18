@@ -125,3 +125,25 @@ On the consumer side, you can call these methods via your RPC/stub mechanism, pa
 - `fs.rename(oldPath: string, newPath: string): void`
 - `fs.symlink(target: string, path: string): void`
 - `fs.readlink(path: string): string`
+
+## IDurableObjectFs interface
+
+If you want your Durable Object to publicly expose the filesystem methods, you can use the `IDurableObjectFs` interface for type safety and documentation. This interface defines the full set of methods available on the filesystem:
+
+```ts
+import type { IDurableObjectFs } from 'dofs'
+
+export class MyDurableObject implements IDurableObjectFs {
+  // ... implement or delegate to an Fs instance
+}
+```
+
+This is useful for:
+
+- Ensuring your Durable Object exposes the same API as the filesystem
+- Type checking and editor autocompletion
+- Documenting which methods are available for RPC or public access
+
+You can implement the interface directly, or delegate each method to an internal `Fs` instance.
+
+> **Tip:** Use this interface if you want to make your Durable Object a drop-in replacement for the filesystem API, or to clearly document which methods are available for remote calls.

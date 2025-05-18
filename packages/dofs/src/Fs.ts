@@ -35,7 +35,27 @@ export type FsOptions = {
   chunkSize?: number
 }
 
-export class Fs {
+export interface IDurableObjectFs {
+  readFile(path: string, options?: ReadFileOptions): ReadableStream<Uint8Array>
+  writeFile(path: string, data: ArrayBuffer | string | ReadableStream<Uint8Array>, options?: WriteFileOptions): void
+  read(path: string, options: ReadOptions): ArrayBuffer
+  write(path: string, data: ArrayBuffer | string | ReadableStream<Uint8Array>, options: WriteOptions): void
+  mkdir(path: string, options?: MkdirOptions): void
+  rmdir(path: string, options?: RmdirOptions): void
+  listDir(path: string, options?: ListDirOptions): string[]
+  stat(path: string): Stat
+  setattr(path: string, options: SetAttrOptions): void
+  symlink(target: string, path: string): void
+  readlink(path: string): string
+  rename(oldPath: string, newPath: string): void
+  unlink(path: string): void
+  create(path: string, options?: CreateOptions): void
+  truncate(path: string, size: number): void
+  getDeviceStats(): DeviceStats
+  setDeviceSize(newSize: number): void
+}
+
+export class Fs implements IDurableObjectFs {
   protected ctx: DurableObjectState
   protected env: Env
   protected chunkSize: number

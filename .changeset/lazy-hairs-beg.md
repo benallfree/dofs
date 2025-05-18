@@ -1,0 +1,5 @@
+---
+'dofs': patch
+---
+
+IDurableObjectFs
