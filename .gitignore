@@ -5,3 +5,4 @@ mnt
 node_modules
 .wrangler
 dist
+*.tgz
