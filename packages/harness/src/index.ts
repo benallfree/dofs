@@ -7,7 +7,6 @@ import {
   ReadOptions,
   RmdirOptions,
   SetAttrOptions,
-  Stat,
   WriteFileOptions,
   WriteOptions,
 } from 'dofs'
@@ -137,25 +136,7 @@ app.get('/api/file', async (c) => {
     const contentType = typeMap[ext as keyof typeof typeMap] || 'application/octet-stream'
     const stat = await stub.stat(path)
     const size = stat.size
-    const STREAM_CHUNK_SIZE = 1024 * 1024 // 1MB
-    let currentOffset = 0
-    const stream = new ReadableStream({
-      async pull(controller) {
-        console.log('pull', { currentOffset })
-        if (currentOffset >= size) {
-          controller.close()
-          return
-        }
-        const readLength = Math.min(STREAM_CHUNK_SIZE, size - currentOffset)
-        console.log('pull', { currentOffset, readLength })
-        const chunk = await stub.read(path, { offset: currentOffset, length: readLength })
-        if (typeof chunk === 'string') {
-          throw new Error('Unexpected string result from stub.read')
-        }
-        controller.enqueue(new Uint8Array(chunk))
-        currentOffset += readLength
-      },
-    })
+    const stream = await stub.readFile(path)
     return new Response(stream, {
       status: 200,
       headers: {
