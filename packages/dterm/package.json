@@ -1,0 +1,54 @@
+{
+  "name": "dofs-term",
+  "description": "A terminal emulator for Cloudflare Durable Objects.",
+  "version": "0.0.1-rc.0",
+  "author": {
+    "name": "Ben Allfree",
+    "url": "https://x.com/benallfree"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/benallfree/dofs"
+  },
+  "keywords": [
+    "cloudflare",
+    "durable-objects",
+    "dofs",
+    "terminal",
+    "emulator",
+    "xterm",
+    "hono",
+    "cli",
+    "shell",
+    "web-terminal",
+    "filesystem-ui"
+  ],
+  "homepage": "https://github.com/benallfree/dofs/tree/main/packages/dterm",
+  "scripts": {
+    "build": "tsup",
+    "watch": "tsup --watch"
+  },
+  "exports": {
+    "./hono": {
+      "import": "./dist/hono.mjs",
+      "types": "./dist/hono.d.mts"
+    },
+    "./vanilla": {
+      "import": "./dist/vanilla.mjs",
+      "types": "./dist/vanilla.d.mts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@xterm/xterm": "^5.3.0",
+    "tsup": "^8.5.0",
+    "hono": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@xterm/xterm": "^5.3.0",
+    "hono": "^4.0.0"
+  }
+}
