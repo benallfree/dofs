@@ -2,15 +2,19 @@
   "name": "dofs-harness",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev",
+    "dev": "vite dev",
+    "build": "vite build",
+    "deploy": "npm run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.2.2",
     "dofs": "workspace:*",
-    "hono": "^4.7.8"
+    "dofs-term": "workspace:*",
+    "hono": "^4.7.8",
+    "vite": "^6.3.5"
   },
   "packageManager": "bun@1.1.13"
 }

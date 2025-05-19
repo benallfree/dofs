@@ -12,8 +12,8 @@ import {
   WriteFileOptions,
   WriteOptions,
 } from 'dofs'
+import { dterm } from 'dofs-term/hono'
 import { Hono } from 'hono'
-import { dterm } from './dterm'
 
 export class MyDurableObject extends DurableObject<Env> implements IDurableObjectFs {
   private fs: Fs
@@ -21,10 +21,6 @@ export class MyDurableObject extends DurableObject<Env> implements IDurableObjec
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
     this.fs = new Fs(ctx, env, { chunkSize: 4 * 1024 })
-  }
-
-  public getFs() {
-    return this.fs
   }
 
   // Expose all fs methods as sync public methods
@@ -85,7 +81,7 @@ const app = new Hono<{ Bindings: Env }>()
 
 // Mount the API middleware
 app.route(
-  '/',
+  '/api/dterm',
   dterm((env: Env) => {
     const id = env.MY_DURABLE_OBJECT.idFromName('dofs')
     return env.MY_DURABLE_OBJECT.get(id)

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Durable Object File System Terminal</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #181818;
+      }
+      #terminal {
+        height: 100vh;
+        width: 100vw;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="terminal"></div>
+    <script type="module">
+      import { Terminal } from '@xterm/xterm'
+      import '@xterm/xterm/css/xterm.css'
+      import { dterm } from 'dofs-term/vanilla'
+
+      const term = new Terminal({
+        theme: { background: '#181818', foreground: '#e0e0e0' },
+        fontFamily: 'monospace',
+        fontSize: 16,
+        cursorBlink: true,
+      })
+      dterm(term)
+      term.open(document.getElementById('terminal'))
+    </script>
+  </body>
+</html>
