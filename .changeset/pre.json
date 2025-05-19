@@ -3,9 +3,10 @@
   "tag": "rc",
   "initialVersions": {
     "dofs": "0.0.1",
-    "dofs-harness": "0.0.1"
+    "dofs-term": "0.0.1"
   },
   "changesets": [
+    "heavy-tigers-grow",
     "hip-banks-argue",
     "lazy-hairs-beg",
     "moody-bikes-hear",
