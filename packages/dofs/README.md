@@ -9,9 +9,9 @@ A filesystem-like API for Cloudflare Durable Objects, supporting streaming reads
 - Streaming read and write support via ReadableStream and WritableStream
 - Designed for use in Durable Objects (DOs)
 
-## Usage Example
+## Basic Usage
 
-### 1. Creating a dofs instance in your Durable Object
+Create a dofs instance in your Durable Object:
 
 ```ts
 import { DurableObject } from 'cloudflare:workers'
@@ -38,7 +38,9 @@ export class MyDurableObject extends DurableObject<Env> {
 }
 ```
 
-### 1a. Customizing chunk size
+## Configuration Options
+
+### Chunk Size
 
 By default, the chunk size is 64kb. You can configure it by passing the `chunkSize` option (in bytes) to the `Fs` constructor:
 
@@ -56,7 +58,7 @@ const fs = new Fs(ctx, env, { chunkSize: 256 * 1024 }) // 256kb chunks
 
 > **Note:** Chunk size cannot be changed after the first file has been written to the filesystem. It is fixed for the lifetime of the filesystem instance.
 
-### 1b. Setting device size
+### Device Size
 
 By default, the device size (total storage available) is 1GB (`1024 * 1024 * 1024` bytes). You can change this limit using the `setDeviceSize` method:
 
@@ -75,7 +77,13 @@ console.log(stats.deviceSize, stats.spaceUsed, stats.spaceAvailable)
 
 > **Default:** 1GB if not set.
 
-### 2. Exposing methods publicly
+## Streaming Support
+
+- **Read:** `readFile(path)` returns a `ReadableStream<Uint8Array>` for efficient, chunked reading.
+- **Write:** `writeFile(path, stream)` accepts a `ReadableStream<Uint8Array>` for efficient, chunked writing.
+- You can also use `writeFile(path, data)` with a string or ArrayBuffer for non-streaming writes.
+
+## Public Interface
 
 You can expose methods on your Durable Object class that call into the `fs` instance. For example, to support streaming uploads and downloads:
 
@@ -92,41 +100,7 @@ public readFile(path: string) {
 
 On the consumer side, you can call these methods via your RPC/stub mechanism, passing a stream for uploads and receiving a stream for downloads.
 
-### 3. Streaming support
-
-- **Read:** `readFile(path)` returns a `ReadableStream<Uint8Array>` for efficient, chunked reading.
-- **Write:** `writeFile(path, stream)` accepts a `ReadableStream<Uint8Array>` for efficient, chunked writing.
-- You can also use `writeFile(path, data)` with a string or ArrayBuffer for non-streaming writes.
-
-### 4. Chunk size configuration
-
-- The chunk size is currently fixed at 1MB (`1024 * 1024` bytes) for both reads and writes.
-- **Note:** The chunk size is fixed for each file at creation time and cannot be changed later. A future `defrag()` method will allow changing chunk size and re-chunking files.
-
-## Future Plans
-
-- In-memory block caching for improved read/write performance
-- Store small files (that fit in one block) directly in the inode table instead of the chunk table to reduce queries
-- `defrag()` method to allow changing chunk size and optimizing storage
-
-## API
-
-**Note:** These are async from the CF Worker stub (RPC call), but are sync when called inside the Durable Object (direct call).
-
-- `fs.readFile(path: string): ReadableStream<Uint8Array>`
-- `fs.writeFile(path: string, data: string | ArrayBuffer | ReadableStream<Uint8Array>): void`
-- `fs.read(path: string, options): ArrayBuffer` (non-streaming, offset/length)
-- `fs.write(path: string, data, options): void` (non-streaming, offset)
-- `fs.mkdir(path: string, options?): void`
-- `fs.rmdir(path: string, options?): void`
-- `fs.listDir(path: string, options?): string[]`
-- `fs.stat(path: string): Stat`
-- `fs.unlink(path: string): void`
-- `fs.rename(oldPath: string, newPath: string): void`
-- `fs.symlink(target: string, path: string): void`
-- `fs.readlink(path: string): string`
-
-## IDurableObjectFs interface
+### IDurableObjectFs Interface
 
 If you want your Durable Object to publicly expose the filesystem methods, you can use the `IDurableObjectFs` interface for type safety and documentation. This interface defines the full set of methods available on the filesystem:
 
@@ -147,3 +121,31 @@ This is useful for:
 You can implement the interface directly, or delegate each method to an internal `Fs` instance.
 
 > **Tip:** Use this interface if you want to make your Durable Object a drop-in replacement for the filesystem API, or to clearly document which methods are available for remote calls.
+
+## API Reference
+
+**Note:** These are async from the CF Worker stub (RPC call), but are sync when called inside the Durable Object (direct call).
+
+- `fs.readFile(path: string): ReadableStream<Uint8Array>`
+- `fs.writeFile(path: string, data: string | ArrayBuffer | ReadableStream<Uint8Array>): void`
+- `fs.read(path: string, options): ArrayBuffer` (non-streaming, offset/length)
+- `fs.write(path: string, data, options): void` (non-streaming, offset)
+- `fs.mkdir(path: string, options?): void`
+- `fs.rmdir(path: string, options?): void`
+- `fs.listDir(path: string, options?): string[]`
+- `fs.stat(path: string): Stat`
+- `fs.unlink(path: string): void`
+- `fs.rename(oldPath: string, newPath: string): void`
+- `fs.symlink(target: string, path: string): void`
+- `fs.readlink(path: string): string`
+
+## Projects that work with dofs
+
+- dterm
+- dofsgui
+
+## Future Plans
+
+- In-memory block caching for improved read/write performance
+- Store small files (that fit in one block) directly in the inode table instead of the chunk table to reduce queries
+- `defrag()` method to allow changing chunk size and optimizing storage
