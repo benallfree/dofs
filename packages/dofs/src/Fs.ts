@@ -1,3 +1,5 @@
+import { RpcTarget } from 'cloudflare:workers'
+
 export type CreateOptions = { mode?: number; umask?: number }
 export type DeviceStats = {
   deviceSize: number
@@ -35,32 +37,13 @@ export type FsOptions = {
   chunkSize?: number
 }
 
-export interface IDurableObjectFs {
-  readFile(path: string, options?: ReadFileOptions): ReadableStream<Uint8Array>
-  writeFile(path: string, data: ArrayBuffer | string | ReadableStream<Uint8Array>, options?: WriteFileOptions): void
-  read(path: string, options: ReadOptions): ArrayBuffer
-  write(path: string, data: ArrayBuffer | string, options: WriteOptions): void
-  mkdir(path: string, options?: MkdirOptions): void
-  rmdir(path: string, options?: RmdirOptions): void
-  listDir(path: string, options?: ListDirOptions): string[]
-  stat(path: string): Stat
-  setattr(path: string, options: SetAttrOptions): void
-  symlink(target: string, path: string): void
-  readlink(path: string): string
-  rename(oldPath: string, newPath: string): void
-  unlink(path: string): void
-  create(path: string, options?: CreateOptions): void
-  truncate(path: string, size: number): void
-  getDeviceStats(): DeviceStats
-  setDeviceSize(newSize: number): void
-}
-
-export class Fs implements IDurableObjectFs {
+export class Fs extends RpcTarget {
   protected ctx: DurableObjectState
   protected env: Env
   protected chunkSize: number
 
   constructor(ctx: DurableObjectState, env: Env, options?: FsOptions) {
+    super()
     this.env = env
     this.ctx = ctx
     this.chunkSize = options?.chunkSize ?? 64 * 1024 // 64kb
