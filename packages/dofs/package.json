@@ -47,5 +47,8 @@
   ],
   "peerDependencies": {
     "hono": "^4.7.10"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.27"
   }
 }
