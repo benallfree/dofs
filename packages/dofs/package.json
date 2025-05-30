@@ -27,7 +27,7 @@
   "scripts": {
     "cf-typegen": "wrangler types",
     "build": "tsup",
-    "watch": "tsup --watch"
+    "dev": "tsup --watch"
   },
   "main": "./dist/Fs.mjs",
   "module": "./dist/Fs.mjs",
