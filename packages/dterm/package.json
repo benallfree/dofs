@@ -27,7 +27,7 @@
   "homepage": "https://github.com/benallfree/dofs/tree/main/packages/dterm",
   "scripts": {
     "build": "tsup",
-    "watch": "tsup --watch"
+    "dev": "tsup --watch"
   },
   "exports": {
     "./hono": {
