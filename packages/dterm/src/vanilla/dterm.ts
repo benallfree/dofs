@@ -238,11 +238,29 @@ export const dterm = (term: Terminal, options?: Options): void => {
       return `Removed ${args[0]}`
     },
     mkdir: async (args: string[]) => {
-      const path = resolvePath(args[0])
-      if (!args[0]) return 'Usage: mkdir <dir>'
-      const res = await fetch(`${url}/mkdir?path=${encodeURIComponent(path)}`, { method: 'POST' })
-      if (!res.ok) return `Error: could not create directory ${args[0]}`
-      return `Created directory ${args[0]}`
+      // Parse flags and directory path
+      let createParents = false
+      let dirPath = ''
+
+      for (const arg of args) {
+        if (arg === '-p') {
+          createParents = true
+        } else if (!dirPath && !arg.startsWith('-')) {
+          dirPath = arg
+        }
+      }
+
+      if (!dirPath) return 'Usage: mkdir [-p] <dir>'
+
+      const path = resolvePath(dirPath)
+      const url_params = new URLSearchParams({ path })
+      if (createParents) {
+        url_params.set('createParents', 'true')
+      }
+
+      const res = await fetch(`${url}/mkdir?${url_params.toString()}`, { method: 'POST' })
+      if (!res.ok) return `Error: could not create directory ${dirPath}`
+      return `Created directory ${dirPath}`
     },
     rmdir: async (args: string[]) => {
       const path = resolvePath(args[0])
