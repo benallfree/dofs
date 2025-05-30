@@ -11,27 +11,17 @@
         margin: 0;
         background: #181818;
       }
-      #terminal {
+      d-term {
+        display: block;
         height: 100vh;
         width: 100vw;
       }
     </style>
   </head>
   <body>
-    <div id="terminal"></div>
+    <d-term url="/api/dofs/MY_DURABLE_OBJECT/dofs"></d-term>
     <script type="module">
-      import { Terminal } from '@xterm/xterm'
-      import '@xterm/xterm/css/xterm.css'
-      import { dterm } from 'dofs-term/vanilla'
-
-      const term = new Terminal({
-        theme: { background: '#181818', foreground: '#e0e0e0' },
-        fontFamily: 'monospace',
-        fontSize: 16,
-        cursorBlink: true,
-      })
-      dterm(term)
-      term.open(document.getElementById('terminal'))
+      import 'dofs-term/vanilla'
     </script>
   </body>
 </html>
