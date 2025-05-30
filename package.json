@@ -17,7 +17,8 @@
     ]
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "packages/dterm/example"
   ],
   "devDependencies": {
     "@changesets/cli": "^2.29.4",
