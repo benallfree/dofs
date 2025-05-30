@@ -2,7 +2,6 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: {
-    hono: 'src/hono/index.ts',
     vanilla: 'src/vanilla/index.ts',
   },
   format: ['esm'],
