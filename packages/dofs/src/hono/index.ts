@@ -1,11 +1,32 @@
-import { IDurableObjectFs } from 'dofs'
 import { Hono } from 'hono'
 
-export const dterm = (getDofsStub: (env: Env) => DurableObjectStub<IDurableObjectFs & Rpc.DurableObjectBranded>) => {
-  const api = new Hono<{ Bindings: Env }>()
+// Extend the context type to include our fs property
+type DofsContext = {
+  Variables: {
+    fs: any // The filesystem stub
+  }
+}
 
-  api.post('/upload', async (c) => {
-    const stub = getDofsStub(c.env)
+export const dofs = () => {
+  const api = new Hono<{ Bindings: Cloudflare.Env } & DofsContext>()
+
+  const getFs = async (doNamespace: string, doName: string, env: Cloudflare.Env) => {
+    if (!(doNamespace in env)) {
+      throw new Error(`Durable Object namespace ${doNamespace} not found`)
+    }
+    const ns = env[doNamespace as keyof Cloudflare.Env] as DurableObjectNamespace<any>
+    const doId = ns.idFromName(doName)
+    const stub: DurableObjectStub<any> = ns.get(doId)
+    // @ts-expect-error - TODO: fix this
+    return stub.getFs()
+  }
+
+  // Create a sub-app for filesystem routes
+  const fsRoutes = new Hono<{ Bindings: Cloudflare.Env } & DofsContext>()
+
+  // All filesystem endpoints - no longer need /:doNamespace/:doId prefix
+  fsRoutes.post('/upload', async (c) => {
+    const fs = c.get('fs')
     const formData = await c.req.formData()
     const file = formData.get('file')
     if (!file || typeof file === 'string') {
@@ -13,20 +34,20 @@ export const dterm = (getDofsStub: (env: Env) => DurableObjectStub<IDurableObjec
     }
     const dir = c.req.query('path') || '/'
     const finalPath = (dir.endsWith('/') ? dir : dir + '/') + file.name
-    await stub.writeFile(finalPath, file.stream())
+    await fs.writeFile(finalPath, file.stream())
     return c.redirect('/')
   })
 
-  api.get('/ls', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.get('/ls', async (c) => {
+    const fs = c.get('fs')
     const path = c.req.query('path') || '/'
-    const entries = await stub.listDir(path)
+    const entries = await fs.listDir(path)
     const stats = await Promise.all(
       entries
         .filter((e: string) => e !== '.' && e !== '..')
         .map(async (e: string) => {
           try {
-            const s = await stub.stat((path.endsWith('/') ? path : path + '/') + e)
+            const s = await fs.stat((path.endsWith('/') ? path : path + '/') + e)
             return { name: e, ...s }
           } catch (err) {
             return { name: e, error: true }
@@ -36,8 +57,8 @@ export const dterm = (getDofsStub: (env: Env) => DurableObjectStub<IDurableObjec
     return c.json(stats)
   })
 
-  api.get('/file', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.get('/file', async (c) => {
+    const fs = c.get('fs')
     const path = c.req.query('path')
     if (!path) return c.text('Missing path', 400)
     try {
@@ -53,10 +74,9 @@ export const dterm = (getDofsStub: (env: Env) => DurableObjectStub<IDurableObjec
         svg: 'image/svg+xml',
       }
       const contentType = typeMap[ext as keyof typeof typeMap] || 'application/octet-stream'
-      const stat = await stub.stat(path)
+      const stat = await fs.stat(path)
       const size = stat.size
-      const stream = await stub.readFile(path)
-      // @ts-expect-error
+      const stream = await fs.readFile(path)
       return new Response(stream, {
         status: 200,
         headers: {
@@ -70,85 +90,100 @@ export const dterm = (getDofsStub: (env: Env) => DurableObjectStub<IDurableObjec
     }
   })
 
-  api.post('/rm', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.post('/rm', async (c) => {
+    const fs = c.get('fs')
     const path = c.req.query('path')
     if (!path) return c.text('Missing path', 400)
     try {
-      await stub.unlink(path)
+      await fs.unlink(path)
       return c.text('OK')
     } catch (e) {
       return c.text('Not found', 404)
     }
   })
 
-  api.post('/mkdir', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.post('/mkdir', async (c) => {
+    const fs = c.get('fs')
     const path = c.req.query('path')
     if (!path) return c.text('Missing path', 400)
     try {
-      await stub.mkdir(path)
+      await fs.mkdir(path)
       return c.text('OK')
     } catch (e) {
       return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
     }
   })
 
-  api.post('/rmdir', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.post('/rmdir', async (c) => {
+    const fs = c.get('fs')
     const path = c.req.query('path')
     if (!path) return c.text('Missing path', 400)
     try {
-      await stub.rmdir(path)
+      await fs.rmdir(path)
       return c.text('OK')
     } catch (e) {
       return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
     }
   })
 
-  api.post('/mv', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.post('/mv', async (c) => {
+    const fs = c.get('fs')
     const src = c.req.query('src')
     const dest = c.req.query('dest')
     if (!src || !dest) return c.text('Missing src or dest', 400)
     try {
-      await stub.rename(src, dest)
+      await fs.rename(src, dest)
       return c.text('OK')
     } catch (e) {
       return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
     }
   })
 
-  api.post('/symlink', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.post('/symlink', async (c) => {
+    const fs = c.get('fs')
     const target = c.req.query('target')
     const path = c.req.query('path')
     if (!target || !path) return c.text('Missing target or path', 400)
     try {
-      await stub.symlink(target, path)
+      await fs.symlink(target, path)
       return c.text('OK')
     } catch (e) {
       return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
     }
   })
 
-  api.get('/stat', async (c) => {
-    const stub = getDofsStub(c.env)
+  fsRoutes.get('/stat', async (c) => {
+    const fs = c.get('fs')
     const path = c.req.query('path')
     if (!path) return c.text('Missing path', 400)
     try {
-      const stat = await stub.stat(path)
+      const stat = await fs.stat(path)
       return c.json(stat)
     } catch (e) {
       return c.text('Error: ' + (e instanceof Error ? e.message : String(e)), 400)
     }
   })
 
-  api.get('/df', async (c) => {
-    const stub = getDofsStub(c.env)
-    const stats = await stub.getDeviceStats()
+  fsRoutes.get('/df', async (c) => {
+    const fs = c.get('fs')
+    const stats = await fs.getDeviceStats()
     return c.json(stats)
   })
+
+  // Middleware to extract filesystem stub and mount the fs routes
+  api.use('/:doNamespace/:doId/*', async (c, next) => {
+    const { doNamespace, doId } = c.req.param()
+    try {
+      const fs = await getFs(doNamespace, doId, c.env)
+      c.set('fs', fs)
+      await next()
+    } catch (error) {
+      return c.text(`Error accessing filesystem: ${error instanceof Error ? error.message : String(error)}`, 500)
+    }
+  })
+
+  // Mount the filesystem routes at /:doNamespace/:doId
+  api.route('/:doNamespace/:doId', fsRoutes)
 
   return api
 }

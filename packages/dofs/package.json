@@ -36,9 +36,16 @@
     ".": {
       "import": "./dist/Fs.mjs",
       "types": "./dist/Fs.d.mts"
+    },
+    "./hono": {
+      "import": "./dist/hono/index.mjs",
+      "types": "./dist/hono/index.d.mts"
     }
   },
   "files": [
     "dist"
-  ]
+  ],
+  "peerDependencies": {
+    "hono": "^4.7.10"
+  }
 }

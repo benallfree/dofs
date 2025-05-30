@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/Fs.ts'],
+  entry: ['src/Fs.ts', 'src/hono/index.ts'],
   format: ['esm'],
   dts: true,
   external: ['cloudflare:workers'],
