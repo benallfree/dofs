@@ -1,3 +1,4 @@
+import { copyFileSync } from 'fs'
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
@@ -7,4 +8,8 @@ export default defineConfig({
   external: ['cloudflare:workers'],
   outDir: 'dist',
   clean: true,
+  onSuccess: async () => {
+    console.log('Copying README.md to root')
+    copyFileSync('README.md', '../../README.md')
+  },
 })
