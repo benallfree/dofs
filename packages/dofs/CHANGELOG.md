@@ -1,5 +1,17 @@
 # dofs
 
+## 0.0.1
+
+### Patch Changes
+
+- recursive mkdir support
+- 967c86c: Device size discussion
+- 5b7e291: IDurableObjectFs
+- fcc96d5: Adjust default chunk size to 64kb and update readme
+- 649afc2: Initial release
+- 199c42c: Update readme with sync/async notes
+- af1e53a: fix write method signature in IDurableObjectFs
+
 ## 0.0.1-rc.2
 
 ### Patch Changes

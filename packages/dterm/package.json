@@ -1,7 +1,7 @@
 {
   "name": "dofs-term",
   "description": "A terminal emulator for Cloudflare Durable Objects.",
-  "version": "0.0.1-rc.0",
+  "version": "0.0.1",
   "author": {
     "name": "Ben Allfree",
     "url": "https://x.com/benallfree"

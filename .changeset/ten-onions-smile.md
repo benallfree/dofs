@@ -1,5 +1,0 @@
----
-'dofs': patch
----
-
-Initial release
