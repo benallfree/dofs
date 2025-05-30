@@ -265,10 +265,22 @@ export class Fs extends RpcTarget {
     if (parts.length === 0) throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
     const name = parts[parts.length - 1]
     const parentPath = '/' + parts.slice(0, -1).join('/')
-    const parent = this.resolvePathToInode(parentPath)
-    // Check if already exists
+    let parent: number
+    try {
+      parent = this.resolvePathToInode(parentPath)
+    } catch (e: any) {
+      if (e.message === 'ENOENT' && options?.recursive) {
+        this.mkdir(parentPath, options)
+        parent = this.resolvePathToInode(parentPath)
+      } else {
+        throw e
+      }
+    }
     const cursor = this.ctx.storage.sql.exec('SELECT ino FROM dofs_files WHERE parent = ? AND name = ?', parent, name)
-    if (cursor.next().value) throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
+    if (cursor.next().value) {
+      if (options?.recursive) return
+      throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
+    }
     const ino = this.allocInode()
     const now = Date.now()
     const mode = options?.mode ?? 0o755
@@ -302,20 +314,49 @@ export class Fs extends RpcTarget {
   }
 
   public rmdir(path: string, options?: RmdirOptions) {
-    const ino = this.resolvePathToInode(path)
-    const cursor = this.ctx.storage.sql.exec('SELECT COUNT(*) as count FROM dofs_files WHERE parent = ?', ino)
-    const row = cursor.next().value
-    if (!row) throw new Error('ENOENT')
-    if (Number(row.count) > 0) throw new Error('ENOTEMPTY')
+    let ino: number
+    try {
+      ino = this.resolvePathToInode(path)
+    } catch (e: any) {
+      if (e.message === 'ENOENT' && options?.recursive) return
+      throw e
+    }
+    if (options?.recursive) {
+      const cursor = this.ctx.storage.sql.exec('SELECT name, is_dir FROM dofs_files WHERE parent = ?', ino)
+      for (let row of cursor) {
+        const childPath = path === '/' ? `/${row.name}` : `${path}/${row.name}`
+        if (row.is_dir) {
+          this.rmdir(childPath, options)
+        } else {
+          this.unlink(childPath)
+        }
+      }
+    } else {
+      const cursor = this.ctx.storage.sql.exec('SELECT COUNT(*) as count FROM dofs_files WHERE parent = ?', ino)
+      const row = cursor.next().value
+      if (!row) throw new Error('ENOENT')
+      if (Number(row.count) > 0) throw new Error('ENOTEMPTY')
+    }
     this.ctx.storage.sql.exec('DELETE FROM dofs_files WHERE ino = ?', ino)
   }
 
   public listDir(path: string, options?: ListDirOptions) {
     const ino = this.resolvePathToInode(path)
-    const cursor = this.ctx.storage.sql.exec('SELECT name FROM dofs_files WHERE parent = ?', ino)
+    const cursor = this.ctx.storage.sql.exec('SELECT name, is_dir FROM dofs_files WHERE parent = ?', ino)
     const names: string[] = ['.', '..']
     for (let row of cursor) {
-      if (typeof row.name === 'string') names.push(row.name)
+      if (typeof row.name === 'string') {
+        names.push(row.name)
+        if (options?.recursive && row.is_dir) {
+          const childPath = path === '/' ? `/${row.name}` : `${path}/${row.name}`
+          const childNames = this.listDir(childPath, options)
+          for (const childName of childNames) {
+            if (childName !== '.' && childName !== '..') {
+              names.push(`${row.name}/${childName}`)
+            }
+          }
+        }
+      }
     }
     return names
   }
