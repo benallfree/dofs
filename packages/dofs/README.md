@@ -11,7 +11,32 @@ A filesystem-like API for Cloudflare Durable Objects, supporting streaming reads
 
 ## Basic Usage
 
-Create a dofs instance in your Durable Object:
+The easiest way to add dofs to your Durable Object is using the `withDofs` helper:
+
+```ts
+import { DurableObject } from 'cloudflare:workers'
+import { withDofs } from 'dofs'
+
+export class MyDurableObject extends withDofs(DurableObject<Env>) {
+  // Your custom methods here
+}
+
+// Or with configuration options:
+export class MyDurableObject extends withDofs(DurableObject<Env>, { chunkSize: 256 * 1024 }) {
+  // Your custom methods here
+}
+```
+
+The `withDofs` helper:
+- Automatically creates the `fs` property in your Durable Object
+- Adds a `getFs()` method to access the filesystem instance
+- Accepts the same configuration options as the `Fs` constructor
+
+> Note: class instances can be [passed via RPC](https://developers.cloudflare.com/workers/runtime-apis/rpc/#class-instances) as long as they inherit from `RpcTarget` as `Fs` does.
+
+### Advanced: Manual Setup
+
+For more control, you can manually create a dofs instance in your Durable Object:
 
 ```ts
 import { DurableObject } from 'cloudflare:workers'
@@ -31,8 +56,6 @@ export class MyDurableObject extends DurableObject<Env> {
   }
 }
 ```
-
-> Note: class instances can be [passed via RPC](https://developers.cloudflare.com/workers/runtime-apis/rpc/#class-instances) as long as they inherit from `RpcTarget` as `Fs` does.
 
 ## Configuration Options
 

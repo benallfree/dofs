@@ -1,8 +1,10 @@
+/// <reference types="node" />
+
 import { copyFileSync } from 'fs'
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/Fs.ts', 'src/hono/index.ts'],
+  entry: { index: 'src/index.ts', hono: 'src/hono/index.ts' },
   format: ['esm'],
   dts: true,
   external: ['cloudflare:workers'],

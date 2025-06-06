@@ -25,7 +25,6 @@
   ],
   "homepage": "https://github.com/benallfree/dofs/tree/main/packages/dofs",
   "scripts": {
-    "cf-typegen": "wrangler types",
     "build": "tsup",
     "dev": "tsup --watch"
   },
@@ -34,12 +33,12 @@
   "types": "./dist/Fs.d.mts",
   "exports": {
     ".": {
-      "import": "./dist/Fs.mjs",
-      "types": "./dist/Fs.d.mts"
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
     },
     "./hono": {
-      "import": "./dist/hono/index.mjs",
-      "types": "./dist/hono/index.d.mts"
+      "import": "./dist/hono.mjs",
+      "types": "./dist/hono.d.mts"
     }
   },
   "files": [
@@ -49,6 +48,6 @@
     "hono": "^4.7.10"
   },
   "devDependencies": {
-    "@types/node": "^22.15.27"
+    "@types/node": "^22.15.30"
   }
 }
