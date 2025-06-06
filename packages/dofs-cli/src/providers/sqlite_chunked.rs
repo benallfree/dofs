@@ -89,14 +89,30 @@ impl From<&fuser::FileAttr> for SerializableFileAttr {
 
 impl From<&SerializableFileAttr> for fuser::FileAttr {
     fn from(attr: &SerializableFileAttr) -> Self {
+        // Ensure timestamps are within valid range to prevent overflow
+        let now = SystemTime::now();
+        let safe_time = |t: SystemTime| -> SystemTime {
+            // If timestamp is more than 100 years in the future, use current time
+            if let Ok(duration_since_epoch) = t.duration_since(std::time::UNIX_EPOCH) {
+                if duration_since_epoch.as_secs() > now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() + (100 * 365 * 24 * 3600) {
+                    now
+                } else {
+                    t
+                }
+            } else {
+                // If before epoch, use epoch
+                std::time::UNIX_EPOCH
+            }
+        };
+        
         fuser::FileAttr {
             ino: attr.ino,
             size: attr.size,
             blocks: attr.blocks,
-            atime: attr.atime,
-            mtime: attr.mtime,
-            ctime: attr.ctime,
-            crtime: attr.crtime,
+            atime: safe_time(attr.atime),
+            mtime: safe_time(attr.mtime),
+            ctime: safe_time(attr.ctime),
+            crtime: safe_time(attr.crtime),
             kind: fuser::FileType::from(attr.kind),
             perm: attr.perm,
             nlink: attr.nlink,
@@ -466,14 +482,27 @@ impl crate::providers::Provider for SqliteChunkedProvider {
                 fuser::TimeOrNow::Now => SystemTime::now(),
             }
         }
+        fn safe_systemtime(t: SystemTime) -> SystemTime {
+            // Ensure timestamp is within valid range
+            let now = SystemTime::now();
+            if let Ok(duration_since_epoch) = t.duration_since(std::time::UNIX_EPOCH) {
+                if duration_since_epoch.as_secs() > now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() + (100 * 365 * 24 * 3600) {
+                    now
+                } else {
+                    t
+                }
+            } else {
+                std::time::UNIX_EPOCH
+            }
+        }
         if let Some(mut attr) = self.get_attr(ino) {
             if let Some(m) = mode { attr.perm = m as u16; }
             if let Some(u) = uid { attr.uid = u; }
             if let Some(g) = gid { attr.gid = g; }
             if let Some(a) = atime { attr.atime = timeornow_to_systemtime(a); }
             if let Some(m) = mtime { attr.mtime = timeornow_to_systemtime(m); }
-            if let Some(c) = ctime { attr.ctime = c; }
-            if let Some(cr) = crtime { attr.crtime = cr; }
+            if let Some(c) = ctime { attr.ctime = safe_systemtime(c); }
+            if let Some(cr) = crtime { attr.crtime = safe_systemtime(cr); }
             if let Some(fg) = flags { attr.flags = fg; }
             if let Some(new_size) = size {
                 self.truncate_file(ino, new_size);

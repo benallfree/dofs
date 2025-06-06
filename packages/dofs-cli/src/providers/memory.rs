@@ -144,6 +144,19 @@ impl Provider for MemoryProvider {
                 fuser::TimeOrNow::Now => SystemTime::now(),
             }
         }
+        fn safe_systemtime(t: SystemTime) -> SystemTime {
+            // Ensure timestamp is within valid range
+            let now = SystemTime::now();
+            if let Ok(duration_since_epoch) = t.duration_since(std::time::UNIX_EPOCH) {
+                if duration_since_epoch.as_secs() > now.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() + (100 * 365 * 24 * 3600) {
+                    now
+                } else {
+                    t
+                }
+            } else {
+                std::time::UNIX_EPOCH
+            }
+        }
         if let Some(node) = self.inodes.get_mut(&ino) {
             match node {
                 Node::File(f) => {
@@ -156,8 +169,8 @@ impl Provider for MemoryProvider {
                     if let Some(g) = gid { f.attr.gid = g; }
                     if let Some(a) = atime { f.attr.atime = timeornow_to_systemtime(a); }
                     if let Some(m) = mtime { f.attr.mtime = timeornow_to_systemtime(m); }
-                    if let Some(c) = ctime { f.attr.ctime = c; }
-                    if let Some(cr) = crtime { f.attr.crtime = cr; }
+                    if let Some(c) = ctime { f.attr.ctime = safe_systemtime(c); }
+                    if let Some(cr) = crtime { f.attr.crtime = safe_systemtime(cr); }
                     if let Some(fg) = flags { f.attr.flags = fg; }
                     reply.attr(&std::time::Duration::from_secs(1), &f.attr);
                 }
@@ -167,8 +180,8 @@ impl Provider for MemoryProvider {
                     if let Some(g) = gid { d.attr.gid = g; }
                     if let Some(a) = atime { d.attr.atime = timeornow_to_systemtime(a); }
                     if let Some(m) = mtime { d.attr.mtime = timeornow_to_systemtime(m); }
-                    if let Some(c) = ctime { d.attr.ctime = c; }
-                    if let Some(cr) = crtime { d.attr.crtime = cr; }
+                    if let Some(c) = ctime { d.attr.ctime = safe_systemtime(c); }
+                    if let Some(cr) = crtime { d.attr.crtime = safe_systemtime(cr); }
                     if let Some(fg) = flags { d.attr.flags = fg; }
                     reply.attr(&std::time::Duration::from_secs(1), &d.attr);
                 }
@@ -178,8 +191,8 @@ impl Provider for MemoryProvider {
                     if let Some(g) = gid { s.attr.gid = g; }
                     if let Some(a) = atime { s.attr.atime = timeornow_to_systemtime(a); }
                     if let Some(m) = mtime { s.attr.mtime = timeornow_to_systemtime(m); }
-                    if let Some(c) = ctime { s.attr.ctime = c; }
-                    if let Some(cr) = crtime { s.attr.crtime = cr; }
+                    if let Some(c) = ctime { s.attr.ctime = safe_systemtime(c); }
+                    if let Some(cr) = crtime { s.attr.crtime = safe_systemtime(cr); }
                     if let Some(fg) = flags { s.attr.flags = fg; }
                     reply.attr(&std::time::Duration::from_secs(1), &s.attr);
                 }
