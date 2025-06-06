@@ -1,15 +1,47 @@
-# dofs-cli
+# cf-fuse
 
-To install dependencies:
+## Running the Main Program
 
-```bash
-bun install
+Build the project:
+
+```sh
+cargo build --release
 ```
 
-To run:
+Run the FUSE filesystem (default mountpoint is `./mnt`):
 
-```bash
-bun run src/index.js
+```sh
+cargo run --release -- [--provider=memory|sqlite_simple|sqlite_chunked] [--mountpoint=PATH] [--chunk_size=SIZE] [--mode=osx]
 ```
 
-This project was created using `bun init` in bun v1.2.2. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+- `--provider` (optional): Choose backend. Default is `memory`.
+- `--mountpoint` (optional): Directory to mount. Default is `./mnt`.
+- `--chunk_size` (optional): Only for `sqlite_chunked`. Default is 4096.
+- `--mode=osx` (optional): Enable macOS-specific mode.
+
+Example:
+
+```sh
+cargo run --release -- --provider=sqlite_simple --mountpoint=./mnt
+```
+
+Unmount with:
+
+```sh
+umount ./mnt
+```
+
+## Running the Stress Tests
+
+The stress test runs for all providers and prints a summary table.
+
+```sh
+cargo test --test integration_stress -- --nocapture
+```
+
+- Requires `umount` command and `prettytable-rs` crate (should be in dependencies).
+- The test will mount and unmount `./mnt` and create/remove test files.
+
+---
+
+For more options, see `src/main.rs` and `tests/integration_stress.rs`.
