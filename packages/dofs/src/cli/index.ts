@@ -125,25 +125,21 @@ program
               cb(0, response.data)
             } else if (path.startsWith('/') && !path.includes('/', 1)) {
               // Top-level namespace directory (like /MY_DURABLE_OBJECT)
-              // For now, return empty directory since we haven't implemented instances yet
-              // TODO: In the future, we'll call getInstances() and return actual DO instances
-              const namespaceName = path.substring(1)
-
-              // First verify this namespace exists by asking the server
+              // Request instance listing from server
               try {
                 const response = await sendWsRequest({
-                  operation: 'getattr',
+                  operation: 'readdir',
                   path: path,
                 })
 
                 if (response.success) {
-                  // Valid namespace, return empty directory for now
-                  cb(0, [])
+                  cb(0, response.data)
                 } else {
                   cb(FuseErrno.ENOENT)
                 }
               } catch (error) {
-                cb(FuseErrno.ENOENT)
+                console.error('❌ readdir error for namespace:', error)
+                cb(FuseErrno.EIO)
               }
             } else {
               cb(FuseErrno.ENOENT) // Not found
@@ -166,6 +162,36 @@ program
             } else if (path.startsWith('/') && !path.includes('/', 1)) {
               // Top-level entry - should be a namespace directory
               // We need to check with the server if this namespace exists
+              try {
+                const response = await sendWsRequest({
+                  operation: 'getattr',
+                  path: path,
+                })
+
+                if (response.success) {
+                  // Convert date strings back to Date objects (JSON serialization converts Dates to strings)
+                  const statData = response.data
+                  if (statData.mtime && typeof statData.mtime === 'string') {
+                    statData.mtime = new Date(statData.mtime)
+                  }
+                  if (statData.atime && typeof statData.atime === 'string') {
+                    statData.atime = new Date(statData.atime)
+                  }
+                  if (statData.ctime && typeof statData.ctime === 'string') {
+                    statData.ctime = new Date(statData.ctime)
+                  }
+
+                  cb(0, statData)
+                } else {
+                  cb(FuseErrno.ENOENT)
+                }
+              } catch (error) {
+                // If server doesn't recognize the path, it's not found
+                cb(FuseErrno.ENOENT)
+              }
+            } else if (path.startsWith('/')) {
+              // Instance-level path like /NAMESPACE/INSTANCE-SLUG
+              // Ask server to validate and get stat info
               try {
                 const response = await sendWsRequest({
                   operation: 'getattr',

@@ -221,7 +221,7 @@ export const dofs = (config: DurableObjectConfig) => {
     '/ws',
     upgradeWebSocket((c) => {
       return {
-        onMessage(event, ws) {
+        async onMessage(event, ws) {
           console.log('WebSocket message received:', event.data)
 
           try {
@@ -247,6 +247,49 @@ export const dofs = (config: DurableObjectConfig) => {
 
               ws.send(JSON.stringify(response))
               return
+            }
+
+            // Handle FUSE readdir operation for namespace directories
+            if (message.operation === 'readdir' && message.path.startsWith('/') && !message.path.includes('/', 1)) {
+              const namespaceName = message.path.substring(1)
+
+              if (namespaceName in config) {
+                try {
+                  // Get instances for this namespace
+                  const instances = await config[namespaceName].getInstances()
+                  const instanceSlugs = instances.map((instance) => instance.slug)
+
+                  const response = {
+                    id: message.id,
+                    success: true,
+                    operation: 'readdir',
+                    data: instanceSlugs,
+                  }
+
+                  ws.send(JSON.stringify(response))
+                  return
+                } catch (error) {
+                  // Error getting instances
+                  const response = {
+                    id: message.id,
+                    success: false,
+                    operation: 'readdir',
+                    error: 'EIO',
+                  }
+                  ws.send(JSON.stringify(response))
+                  return
+                }
+              } else {
+                // Invalid namespace
+                const response = {
+                  id: message.id,
+                  success: false,
+                  operation: 'readdir',
+                  error: 'ENOENT',
+                }
+                ws.send(JSON.stringify(response))
+                return
+              }
             }
 
             // Handle FUSE getattr operation for namespace validation
@@ -297,6 +340,82 @@ export const dofs = (config: DurableObjectConfig) => {
                   return
                 } else {
                   // Invalid namespace
+                  const response = {
+                    id: message.id,
+                    success: false,
+                    operation: 'getattr',
+                    error: 'ENOENT',
+                  }
+                  ws.send(JSON.stringify(response))
+                  return
+                }
+              } else if (requestedPath.startsWith('/')) {
+                // Check if this is a valid instance path: /NAMESPACE/INSTANCE-SLUG
+                const pathParts = requestedPath.split('/').filter((part) => part.length > 0)
+
+                if (pathParts.length === 2) {
+                  const [namespaceName, instanceSlug] = pathParts
+
+                  if (namespaceName in config) {
+                    try {
+                      // Get instances for this namespace and check if this slug exists
+                      const instances = await config[namespaceName].getInstances()
+                      const instanceExists = instances.some((instance) => instance.slug === instanceSlug)
+
+                      if (instanceExists) {
+                        // Valid instance - return directory stat
+                        const response = {
+                          id: message.id,
+                          success: true,
+                          operation: 'getattr',
+                          data: {
+                            mtime: new Date(),
+                            atime: new Date(),
+                            ctime: new Date(),
+                            nlink: 1,
+                            size: 4096,
+                            mode: 16877, // Directory mode
+                            uid: 0,
+                            gid: 0,
+                          },
+                        }
+                        ws.send(JSON.stringify(response))
+                        return
+                      } else {
+                        // Invalid instance
+                        const response = {
+                          id: message.id,
+                          success: false,
+                          operation: 'getattr',
+                          error: 'ENOENT',
+                        }
+                        ws.send(JSON.stringify(response))
+                        return
+                      }
+                    } catch (error) {
+                      // Error getting instances
+                      const response = {
+                        id: message.id,
+                        success: false,
+                        operation: 'getattr',
+                        error: 'EIO',
+                      }
+                      ws.send(JSON.stringify(response))
+                      return
+                    }
+                  } else {
+                    // Invalid namespace
+                    const response = {
+                      id: message.id,
+                      success: false,
+                      operation: 'getattr',
+                      error: 'ENOENT',
+                    }
+                    ws.send(JSON.stringify(response))
+                    return
+                  }
+                } else {
+                  // Deeper paths not implemented yet
                   const response = {
                     id: message.id,
                     success: false,
