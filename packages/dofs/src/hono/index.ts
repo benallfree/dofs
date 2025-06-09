@@ -1,3 +1,4 @@
+import { DurableObject } from 'cloudflare:workers'
 import { Hono } from 'hono'
 
 // Extend the context type to include our fs property
@@ -7,7 +8,36 @@ type DofsContext = {
   }
 }
 
-export const dofs = () => {
+/**
+ * Represents an instance of a Durable Object
+ */
+export interface DurableObjectInstance {
+  /** The unique slug identifier for the instance */
+  slug: string
+  /** The display name of the instance */
+  name: string
+}
+
+/**
+ * Configuration for a single Durable Object
+ */
+export interface DurableObjectConfigItem {
+  /** The name of the Durable Object */
+  name: string
+  /** Reference to the Durable Object class for compatibility checking */
+  classRef: typeof DurableObject<any>
+  /** Function to get instances, optionally paginated */
+  getInstances: (page?: number) => Promise<DurableObjectInstance[]>
+  /** List of compatible plugin slugs (populated at runtime) */
+  compatiblePlugins?: string[]
+}
+
+/**
+ * Configuration object for Durable Objects
+ */
+export type DurableObjectConfig = Record<string, DurableObjectConfigItem>
+
+export const dofs = (config: DurableObjectConfig) => {
   const api = new Hono<{ Bindings: Cloudflare.Env } & DofsContext>()
 
   const getFs = async (doNamespace: string, doName: string, env: Cloudflare.Env) => {
@@ -17,7 +47,7 @@ export const dofs = () => {
     const ns = env[doNamespace as keyof Cloudflare.Env] as DurableObjectNamespace<any>
     const doId = ns.idFromName(doName)
     const stub: DurableObjectStub<any> = ns.get(doId)
-    // @ts-expect-error - TODO: fix this
+    // @ts-ignore
     return stub.getFs()
   }
 
