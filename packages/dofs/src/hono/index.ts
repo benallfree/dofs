@@ -223,8 +223,119 @@ export const dofs = (config: DurableObjectConfig) => {
       return {
         onMessage(event, ws) {
           console.log('WebSocket message received:', event.data)
-          // TODO: Handle FUSE operations via WebSocket
-          ws.send('Hello from DOFS WebSocket!')
+
+          try {
+            const message = JSON.parse(event.data.toString())
+
+            // Handle FUSE readdir operation for root directory
+            if (message.operation === 'readdir' && message.path === '/') {
+              // Get list of durable object namespaces from config
+              const namespaces: string[] = []
+
+              for (const [namespace, doConfig] of Object.entries(config)) {
+                // Add namespace name as top-level directory
+                // Each namespace will contain instances from doConfig.getInstances()
+                namespaces.push(namespace)
+              }
+
+              const response = {
+                id: message.id,
+                success: true,
+                operation: 'readdir',
+                data: namespaces,
+              }
+
+              ws.send(JSON.stringify(response))
+              return
+            }
+
+            // Handle FUSE getattr operation for namespace validation
+            if (message.operation === 'getattr') {
+              const requestedPath = message.path
+
+              if (requestedPath === '/') {
+                // Root directory stat
+                const response = {
+                  id: message.id,
+                  success: true,
+                  operation: 'getattr',
+                  data: {
+                    mtime: new Date(),
+                    atime: new Date(),
+                    ctime: new Date(),
+                    nlink: 1,
+                    size: 4096,
+                    mode: 16877, // Directory mode
+                    uid: 0,
+                    gid: 0,
+                  },
+                }
+                ws.send(JSON.stringify(response))
+                return
+              } else if (requestedPath.startsWith('/') && !requestedPath.includes('/', 1)) {
+                // Top-level namespace directory
+                const namespaceName = requestedPath.substring(1)
+
+                if (namespaceName in config) {
+                  // Valid namespace - return directory stat
+                  const response = {
+                    id: message.id,
+                    success: true,
+                    operation: 'getattr',
+                    data: {
+                      mtime: new Date(),
+                      atime: new Date(),
+                      ctime: new Date(),
+                      nlink: 1,
+                      size: 4096,
+                      mode: 16877, // Directory mode
+                      uid: 0,
+                      gid: 0,
+                    },
+                  }
+                  ws.send(JSON.stringify(response))
+                  return
+                } else {
+                  // Invalid namespace
+                  const response = {
+                    id: message.id,
+                    success: false,
+                    operation: 'getattr',
+                    error: 'ENOENT',
+                  }
+                  ws.send(JSON.stringify(response))
+                  return
+                }
+              } else {
+                // Deeper paths not implemented yet
+                const response = {
+                  id: message.id,
+                  success: false,
+                  operation: 'getattr',
+                  error: 'ENOENT',
+                }
+                ws.send(JSON.stringify(response))
+                return
+              }
+            }
+
+            // Echo back other messages for now
+            ws.send(
+              JSON.stringify({
+                id: message.id || 'unknown',
+                success: true,
+                echo: message,
+              })
+            )
+          } catch (error) {
+            // Send error response
+            ws.send(
+              JSON.stringify({
+                success: false,
+                error: 'Invalid JSON message',
+              })
+            )
+          }
         },
         onOpen() {
           console.log('WebSocket connection opened')
