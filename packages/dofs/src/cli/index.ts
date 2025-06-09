@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
+import pkg from '../../package.json'
 
 const program = new Command()
 
-program.name('dofs').description('A filesystem for Cloudflare Durable Objects').version('0.0.2')
+program.name('dofs').description('A filesystem for Cloudflare Durable Objects').version(pkg.version)
 
 program
   .command('init')
