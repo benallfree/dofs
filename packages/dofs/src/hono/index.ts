@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { Hono } from 'hono'
+import { upgradeWebSocket } from 'hono/cloudflare-workers'
 
 // Extend the context type to include our fs property
 type DofsContext = {
@@ -214,6 +215,29 @@ export const dofs = (config: DurableObjectConfig) => {
 
   // Mount the filesystem routes at /:doNamespace/:doId
   api.route('/:doNamespace/:doId', fsRoutes)
+
+  // WebSocket endpoint for FUSE operations
+  api.get(
+    '/ws',
+    upgradeWebSocket((c) => {
+      return {
+        onMessage(event, ws) {
+          console.log('WebSocket message received:', event.data)
+          // TODO: Handle FUSE operations via WebSocket
+          ws.send('Hello from DOFS WebSocket!')
+        },
+        onOpen() {
+          console.log('WebSocket connection opened')
+        },
+        onClose() {
+          console.log('WebSocket connection closed')
+        },
+        onError(event) {
+          console.error('WebSocket error:', event)
+        },
+      }
+    })
+  )
 
   return api
 }

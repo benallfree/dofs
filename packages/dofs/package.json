@@ -50,13 +50,15 @@
   ],
   "dependencies": {
     "commander": "^14.0.0",
-    "neofuse": "^0.0.1-rc.3"
+    "neofuse": "^0.0.1-rc.3",
+    "ws": "^8.18.2"
   },
   "peerDependencies": {
     "hono": "^4.7.11"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
+    "@types/ws": "^8.18.1",
     "tsdown": "^0.12.7"
   }
 }
