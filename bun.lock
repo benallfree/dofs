@@ -16,7 +16,7 @@
       "name": "dofs",
       "version": "0.0.2",
       "bin": {
-        "dofs": "./src/cli/index.js"
+        "dofs": "./dist/cli/index.mjs"
       },
       "dependencies": {
         "commander": "^14.0.0",
@@ -37,7 +37,6 @@
         "@cloudflare/vite-plugin": "^1.2.2",
         "@xterm/addon-fit": "^0.10.0",
         "dofs": "workspace:*",
-        "dofs-term": "workspace:*",
         "hono": "^4.7.8",
         "vite": "^6.3.5",
         "wrangler": "^4.19.1",

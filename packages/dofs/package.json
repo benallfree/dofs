@@ -29,21 +29,21 @@
     "build": "tsdown",
     "dev": "tsdown --watch"
   },
-  "main": "./dist/Fs.mjs",
-  "module": "./dist/Fs.mjs",
-  "types": "./dist/Fs.d.mts",
+  "main": "./dist/Fs.js",
+  "module": "./dist/Fs.js",
+  "types": "./dist/Fs.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
-      "types": "./dist/index.d.mts"
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./hono": {
-      "import": "./dist/hono.mjs",
-      "types": "./dist/hono.d.mts"
+      "import": "./dist/hono.js",
+      "types": "./dist/hono.d.ts"
     }
   },
   "bin": {
-    "dofs": "./dist/cli/index.mjs"
+    "dofs": "./dist/cli/index.js"
   },
   "files": [
     "dist"
