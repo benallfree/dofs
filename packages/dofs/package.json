@@ -2,6 +2,7 @@
   "name": "dofs",
   "description": "A filesystem for Cloudflare Durable Objects.",
   "version": "0.0.2",
+  "type": "module",
   "author": {
     "name": "Ben Allfree",
     "url": "https://x.com/benallfree"
@@ -41,11 +42,18 @@
       "types": "./dist/hono.d.mts"
     }
   },
+  "bin": {
+    "dofs": "./src/cli/index.js"
+  },
   "files": [
-    "dist"
+    "dist",
+    "src/cli"
   ],
+  "dependencies": {
+    "commander": "^14.0.0"
+  },
   "peerDependencies": {
-    "hono": "^4.7.10"
+    "hono": "^4.7.11"
   },
   "devDependencies": {
     "@types/node": "^22.15.30"
