@@ -10,7 +10,10 @@ export default defineConfig({
     cli: 'src/cli/index.ts',
   },
   format: ['esm'],
-  dts: true,
+  dts: {
+    sourcemap: true,
+  },
+  sourcemap: true,
   external: ['cloudflare:workers'],
   outDir: 'dist',
   clean: true,
