@@ -8,6 +8,22 @@ export class MyDurableObject extends withDofs(DurableObject<Env>, { chunkSize: 4
 const app = new Hono<{ Bindings: Env }>()
 
 // Mount the API middleware
-app.route('/api/dofs', dofs() as any)
+app.route(
+  '/',
+  dofs({
+    MY_DURABLE_OBJECT: {
+      classRef: MyDurableObject,
+      getInstances: async () => {
+        return [
+          {
+            slug: 'my-durable-object',
+            name: 'My Durable Object',
+          },
+        ]
+      },
+      name: 'My Durable Object',
+    },
+  }) as any
+)
 
 export default app
