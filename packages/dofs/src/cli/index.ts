@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
+
 const program = new Command()
 
 program.name('dofs').description('A filesystem for Cloudflare Durable Objects').version('0.0.2')
@@ -17,7 +18,7 @@ program
   .command('mount')
   .description('Mount a DOFS filesystem')
   .option('-p, --path <path>', 'Mount path')
-  .action((options) => {
+  .action((options: { path?: string }) => {
     console.log('Mounting DOFS filesystem...', options)
     // TODO: Implement mount command
   })

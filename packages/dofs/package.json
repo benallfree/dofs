@@ -43,14 +43,14 @@
     }
   },
   "bin": {
-    "dofs": "./src/cli/index.js"
+    "dofs": "./dist/cli/index.mjs"
   },
   "files": [
-    "dist",
-    "src/cli"
+    "dist"
   ],
   "dependencies": {
-    "commander": "^14.0.0"
+    "commander": "^14.0.0",
+    "neofuse": "^0.0.1-rc.3"
   },
   "peerDependencies": {
     "hono": "^4.7.11"

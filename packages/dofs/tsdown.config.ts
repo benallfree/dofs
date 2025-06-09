@@ -4,7 +4,11 @@ import { copyFileSync } from 'fs'
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: { index: 'src/index.ts', hono: 'src/hono/index.ts' },
+  entry: {
+    index: 'src/index.ts',
+    hono: 'src/hono/index.ts',
+    cli: 'src/cli/index.ts',
+  },
   format: ['esm'],
   dts: true,
   external: ['cloudflare:workers'],
