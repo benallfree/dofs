@@ -1,0 +1,5 @@
+---
+'dofs': minor
+---
+
+CLI tool
