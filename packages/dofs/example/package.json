@@ -13,7 +13,6 @@
     "@cloudflare/vite-plugin": "^1.2.2",
     "@xterm/addon-fit": "^0.10.0",
     "dofs": "workspace:*",
-    "dofs-term": "workspace:*",
     "hono": "^4.7.8",
     "vite": "^6.3.5",
     "wrangler": "^4.19.1"
