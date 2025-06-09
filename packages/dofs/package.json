@@ -26,8 +26,8 @@
   ],
   "homepage": "https://github.com/benallfree/dofs/tree/main/packages/dofs",
   "scripts": {
-    "build": "tsup",
-    "dev": "tsup --watch"
+    "build": "tsdown",
+    "dev": "tsdown --watch"
   },
   "main": "./dist/Fs.mjs",
   "module": "./dist/Fs.mjs",
@@ -56,6 +56,7 @@
     "hono": "^4.7.11"
   },
   "devDependencies": {
-    "@types/node": "^22.15.30"
+    "@types/node": "^22.15.30",
+    "tsdown": "^0.12.7"
   }
 }

@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 import { copyFileSync } from 'fs'
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'tsdown'
 
 export default defineConfig({
   entry: { index: 'src/index.ts', hono: 'src/hono/index.ts' },
