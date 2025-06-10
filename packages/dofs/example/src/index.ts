@@ -12,28 +12,34 @@ const app = new Hono<{ Bindings: Env }>()
 app.route(
   '/',
   dofs<Env>({
-    MY_DURABLE_OBJECT: {
-      classRef: MyDurableObject1,
-      getInstances: async () => {
-        return [
-          {
-            slug: 'instance-1',
-            name: 'Instance 1',
-          },
-          {
-            slug: 'instance-2',
-            name: 'Instance 2',
-          },
-        ]
+    dos: {
+      MY_DURABLE_OBJECT: {
+        classRef: MyDurableObject1,
+        getInstances: async () => {
+          return [
+            {
+              slug: 'instance-1',
+              name: 'Instance 1',
+            },
+            {
+              slug: 'instance-2',
+              name: 'Instance 2',
+            },
+          ]
+        },
+        name: 'My Durable Object',
       },
-      name: 'My Durable Object',
-    },
-    MY_DURABLE_OBJECT_1: {
-      classRef: MyDurableObject2,
-      getInstances: async () => {
-        return [{ slug: 'instance-1', name: 'Instance 1' }]
+      MY_DURABLE_OBJECT_1: {
+        classRef: MyDurableObject2,
+        getInstances: async () => {
+          return [
+            { slug: 'instance-1', name: 'Instance 1' },
+            { slug: 'instance-2', name: 'Instance 2' },
+            { slug: 'instance-3', name: 'Instance 3' },
+          ]
+        },
+        name: 'My Durable Object 1',
       },
-      name: 'My Durable Object 1',
     },
   }) as any
 )
