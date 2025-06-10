@@ -126,6 +126,12 @@ export function createFuseOps(wsManager: WebSocketManager, options: MountOptions
           const fd = createFileDescriptor(path)
           cb(0, fd)
         } else {
+          // Prohibit writing to root (/) or namespace directories (/NAMESPACE)
+          if (options.debug) {
+            console.log(
+              `❌ create denied: cannot write files to ${pathParts.length === 0 ? 'root directory' : 'namespace directory'} (${path})`
+            )
+          }
           cb(FuseErrno.EACCES) // Permission denied for invalid paths
         }
       } catch (error) {
@@ -140,14 +146,20 @@ export function createFuseOps(wsManager: WebSocketManager, options: MountOptions
           console.log(`📖 open: ${path}, flags: ${flags}`)
         }
 
-        // For now, just create a file descriptor for any valid path
+        // Check if this is a valid path for file operations (should be /NAMESPACE/INSTANCE/filename)
         const pathParts = path.split('/').filter((part) => part.length > 0)
 
         if (pathParts.length >= 3) {
           const fd = createFileDescriptor(path)
           cb(0, fd)
         } else {
-          cb(FuseErrno.ENOENT)
+          // Prohibit opening files at root (/) or namespace directories (/NAMESPACE)
+          if (options.debug) {
+            console.log(
+              `❌ open denied: cannot open files at ${pathParts.length === 0 ? 'root directory' : 'namespace directory'} (${path})`
+            )
+          }
+          cb(FuseErrno.EACCES) // Permission denied for invalid paths
         }
       } catch (error) {
         console.error('❌ open error:', error)
@@ -199,28 +211,29 @@ export function createFuseOps(wsManager: WebSocketManager, options: MountOptions
 
         // Send the file data to the server
         try {
-          const pathParts = path.split('/').filter((part) => part.length > 0)
+          const writeMessage = {
+            operation: 'write',
+            path: path, // Send the full absolute path for server-side parsing
+            content: fileInfo.data.toString('base64'),
+            encoding: 'base64',
+          }
 
-          if (pathParts.length >= 3) {
-            const [namespace, instanceSlug, ...filePathParts] = pathParts
-            const filePath = '/' + filePathParts.join('/')
+          if (options.debug) {
+            console.log(`🔍 CLIENT: Sending write message:`, JSON.stringify(writeMessage, null, 2))
+          }
 
-            const response = await wsManager.sendRequest({
-              operation: 'write',
-              namespace: namespace,
-              instanceSlug: instanceSlug,
-              path: filePath,
-              content: fileInfo.data.toString('base64'),
-              encoding: 'base64',
-            })
+          const response = await wsManager.sendRequest(writeMessage)
 
-            if (response.success) {
-              if (options.debug) {
-                console.log(`✅ File written: ${path}`)
-              }
-            } else {
-              console.error(`❌ Failed to write file: ${response.error}`)
+          if (options.debug) {
+            console.log(`🔍 CLIENT: Received response:`, JSON.stringify(response, null, 2))
+          }
+
+          if (response.success) {
+            if (options.debug) {
+              console.log(`✅ File written: ${path}`)
             }
+          } else {
+            console.error(`❌ Failed to write file: ${response.error}`)
           }
         } catch (error) {
           console.error('❌ Error sending file to server:', error)
