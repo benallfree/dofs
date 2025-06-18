@@ -8,13 +8,13 @@ export * from './types.js'
 export const dofs = <TEnv extends Cloudflare.Env>(config: DurableObjectConfig) => {
   const api = new Hono<{ Bindings: TEnv } & DofsContext>()
 
-  const getFs = async (doNamespace: string, doName: string, env: Cloudflare.Env) => {
+  const getFs = async (doNamespace: string, doName: string, env: TEnv) => {
     if (!(doNamespace in env)) {
       throw new Error(`Durable Object namespace ${doNamespace} not found`)
     }
-    const ns = env[doNamespace as keyof Cloudflare.Env] as DurableObjectNamespace<WithDofs<TEnv>>
+    const ns = env[doNamespace as keyof TEnv] as DurableObjectNamespace<WithDofs<TEnv>>
     const doId = ns.idFromName(doName)
-    const stub: DurableObjectStub<WithDofs<TEnv>> = ns.get(doId)
+    const stub = ns.get(doId)
     return stub.getFs()
   }
 
