@@ -4,7 +4,7 @@ import { Fs } from '../Fs.js'
 // Extend the context type to include our fs property
 export type DofsContext = {
   Variables: {
-    fs: Fs // The filesystem stub
+    fs: Rpc.Stub<Fs> // The filesystem stub
   }
 }
 

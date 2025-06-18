@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { WithDofs } from '../withDofs.js'
 import { createFsRoutes } from './routes.js'
 import { DofsContext, DurableObjectConfig } from './types.js'
 import { createWebSocketHandler } from './websocket.js'
@@ -12,10 +13,9 @@ export const dofs = <TEnv extends Cloudflare.Env>(config: DurableObjectConfig) =
     if (!(doNamespace in env)) {
       throw new Error(`Durable Object namespace ${doNamespace} not found`)
     }
-    const ns = env[doNamespace as keyof Cloudflare.Env] as DurableObjectNamespace<any>
+    const ns = env[doNamespace as keyof Cloudflare.Env] as DurableObjectNamespace<WithDofs<TEnv>>
     const doId = ns.idFromName(doName)
-    const stub: DurableObjectStub<any> = ns.get(doId)
-    // @ts-ignore
+    const stub: DurableObjectStub<WithDofs<TEnv>> = ns.get(doId)
     return stub.getFs()
   }
 

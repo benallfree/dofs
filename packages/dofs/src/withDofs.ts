@@ -1,5 +1,9 @@
 import { DurableObject } from 'cloudflare:workers'
-import { Fs, FsOptions } from './Fs'
+import { Fs, FsOptions } from './Fs.js'
+
+export type WithDofs<TEnv extends Cloudflare.Env> = DurableObject<TEnv> & {
+  getFs: () => Fs
+}
 
 export const withDofs = <TEnv extends Cloudflare.Env>(
   cls: typeof DurableObject<TEnv>,
