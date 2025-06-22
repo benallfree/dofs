@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Durable Object File System Terminal</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background: #181818;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+
+      .container {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      .header {
+        background: #2d2d2d;
+        color: #e0e0e0;
+        padding: 1rem;
+        border-bottom: 1px solid #444;
+        flex-shrink: 0;
+      }
+
+      .terminal-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0; /* Important for flex child to shrink */
+      }
+
+      d-term {
+        flex: 1;
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1 style="margin: 0; font-size: 1.2rem">DOFS Terminal</h1>
+        <p style="margin: 0.5rem 0 0 0; opacity: 0.7; font-size: 0.9rem">Durable Object File System</p>
+      </div>
+      <div class="terminal-wrapper">
+        <d-term url="/api/dofs/MY_DURABLE_OBJECT/dofs"></d-term>
+      </div>
+    </div>
+    <script type="module">
+      import 'dofs-term/vanilla'
+    </script>
+  </body>
+</html>
