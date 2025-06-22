@@ -1,5 +1,16 @@
 # dofs
 
+## 0.1.0
+
+### Minor Changes
+
+- c5c129d: Update withDofs and add @Dofs attribute
+- 37f0c55: enh: Durable Object configuration
+
+### Patch Changes
+
+- d8185b8: enh: type refinement for withDofs
+
 ## 0.0.2
 
 ### Patch Changes
