@@ -11,23 +11,56 @@ A filesystem-like API for Cloudflare Durable Objects, supporting streaming reads
 
 ## Basic Usage
 
-The easiest way to add dofs to your Durable Object is using the `withDofs` helper:
+The recommended way to add dofs to your Durable Object is using the `@Dofs` decorator:
+
+```ts
+import { DurableObject } from 'cloudflare:workers'
+import { Dofs } from 'dofs'
+
+@Dofs({ chunkSize: 256 * 1024 })
+export class MyDurableObject extends DurableObject<Env> {
+  // Your custom methods here
+  // Access filesystem via this.getFs()
+}
+```
+
+The `@Dofs` decorator:
+
+- Automatically creates the `fs` property in your Durable Object
+- Adds a `getFs()` method to access the filesystem instance
+- Accepts the same configuration options as the `Fs` constructor
+- Works directly with classes extending `DurableObject`
+
+### Alternative: Using withDofs Helper
+
+For cases where you need more control or are working with existing class hierarchies, you can use the `withDofs` helper:
 
 ```ts
 import { DurableObject } from 'cloudflare:workers'
 import { withDofs } from 'dofs'
 
-export class MyDurableObject extends withDofs(DurableObject<Env>) {
+// Create a concrete base class first
+class MyDurableObjectBase extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
+  }
+}
+
+// Then extend it with dofs
+export class MyDurableObject extends withDofs(MyDurableObjectBase) {
   // Your custom methods here
 }
 
 // Or with configuration options:
-export class MyDurableObject extends withDofs(DurableObject<Env>, { chunkSize: 256 * 1024 }) {
+export class MyDurableObject extends withDofs(MyDurableObjectBase, { chunkSize: 256 * 1024 }) {
   // Your custom methods here
 }
 ```
 
-The `withDofs` helper:
+**Important:** Due to TypeScript declaration generation limitations, `withDofs` requires a concrete base class. You cannot pass the abstract `DurableObject` class directly to `withDofs`.
+
+Both approaches provide the same functionality:
+
 - Automatically creates the `fs` property in your Durable Object
 - Adds a `getFs()` method to access the filesystem instance
 - Accepts the same configuration options as the `Fs` constructor

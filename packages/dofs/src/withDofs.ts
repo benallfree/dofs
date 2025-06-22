@@ -5,21 +5,60 @@ export type WithDofs<TEnv extends Cloudflare.Env> = DurableObject<TEnv> & {
   getFs: () => Fs
 }
 
+// Utility to create the extended class
 export const withDofs = <TEnv extends Cloudflare.Env>(
-  cls: typeof DurableObject<TEnv>,
+  cls: new (ctx: DurableObjectState, env: TEnv) => DurableObject<TEnv>,
   options: FsOptions = {}
-): typeof DurableObject<TEnv> => {
-  return class extends cls {
+): new (ctx: DurableObjectState, env: TEnv) => WithDofs<TEnv> => {
+  return class DurableObjectWithDofs extends cls {
     fs: Fs
-    constructor(
-      public ctx: DurableObjectState,
-      public env: TEnv
-    ) {
+    constructor(ctx: DurableObjectState, env: TEnv) {
       super(ctx, env)
       this.fs = new Fs(ctx, env, options)
     }
-    getFs() {
+    getFs(): Fs {
       return this.fs
     }
+  }
+}
+
+export function Dofs<TEnv extends Cloudflare.Env>(options: FsOptions = {}) {
+  return function <T extends new (ctx: DurableObjectState, env: TEnv) => DurableObject<TEnv>>(
+    target: new (ctx: DurableObjectState, env: TEnv) => DurableObject<TEnv>
+  ): new (ctx: DurableObjectState, env: TEnv) => WithDofs<TEnv> {
+    return class extends target {
+      fs: Fs
+      constructor(ctx: DurableObjectState, env: TEnv) {
+        super(ctx, env)
+        this.fs = new Fs(ctx, env, options)
+      }
+      getFs(): Fs {
+        return this.fs
+      }
+    }
+  }
+}
+
+// Testing
+
+class MyDurableObjectBase extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
+  }
+}
+
+class MyDurableObject2 extends withDofs(MyDurableObjectBase, { chunkSize: 4 * 1024 }) {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
+  }
+  test() {
+    this.getFs().readFile('test.txt')
+  }
+}
+
+@Dofs({ chunkSize: 4 * 1024 })
+class MyAttributeObject extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
   }
 }

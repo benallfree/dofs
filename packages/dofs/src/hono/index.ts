@@ -5,7 +5,7 @@ import { DofsContext, DurableObjectConfig } from './types.js'
 
 export * from './types.js'
 
-export const dofs = <TEnv extends Cloudflare.Env>(config: DurableObjectConfig) => {
+export const dofs = <TEnv extends Cloudflare.Env>(config: DurableObjectConfig<TEnv>) => {
   const api = new Hono<{ Bindings: TEnv } & DofsContext>()
 
   const getFs = async (doNamespace: string, doName: string, env: TEnv) => {

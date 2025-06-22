@@ -32,7 +32,7 @@ export type FsStat = {
 /**
  * Configuration for a single Durable Object
  */
-export interface DurableObjectConfigItem {
+export interface DurableObjectConfigItem<TEnv extends Cloudflare.Env> {
   /** The name of the Durable Object */
   name: string
   /** Reference to the Durable Object class for compatibility checking */
@@ -40,15 +40,15 @@ export interface DurableObjectConfigItem {
   /** Function to get instances, optionally paginated */
   getInstances: (page?: number) => Promise<DurableObjectInstance[]>
   /** Function to get the stat for the namespace directory */
-  resolveNamespaceStat?: (cfg: DurableObjectConfig) => Promise<FsStat>
+  resolveNamespaceStat?: (cfg: DurableObjectConfig<TEnv>) => Promise<FsStat>
   /** Function to get the stat for the instance directory */
-  resolveInstanceStat?: (cfg: DurableObjectConfig, instanceId: string) => Promise<FsStat>
+  resolveInstanceStat?: (cfg: DurableObjectConfig<TEnv>, instanceId: string) => Promise<FsStat>
 }
 
 /**
  * Configuration object for Durable Objects
  */
-export type DurableObjectConfig = {
-  resolveRootStat?: (cfg: DurableObjectConfig) => Promise<FsStat>
-  dos: Record<string, DurableObjectConfigItem>
+export type DurableObjectConfig<TEnv extends Cloudflare.Env> = {
+  resolveRootStat?: (cfg: DurableObjectConfig<TEnv>) => Promise<FsStat>
+  dos: Record<string, DurableObjectConfigItem<TEnv>>
 }
